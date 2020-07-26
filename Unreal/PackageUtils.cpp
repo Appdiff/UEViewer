@@ -299,6 +299,68 @@ bool ScanContent(const TArray<const CGameFileInfo*>& Packages, IProgressCallback
 	return !cancelled;
 }
 
+UObject *appLoadObjects(TArray<UObject*> &Objects_out,
+                        const TArray<UnPackage*> &Packages,
+                        TArray<const char*> &objectsToLoad,
+                        const char *argClassName,
+                        const char *attachAnimName,
+                        bool bShouldLoadObjects)
+{
+  UObject *GForceAnimSet = NULL;
+	// load requested objects if any, or fully load everything
+	UObject::BeginLoad();
+	if (objectsToLoad.Num())
+	{
+		// selectively load objects
+		int totalFound = 0;
+		for (int objIdx = 0; objIdx < objectsToLoad.Num(); objIdx++)
+		{
+			const char *objName   = objectsToLoad[objIdx];
+			const char *className = (objIdx == 0) ? argClassName : NULL;
+			int found = 0;
+			for (int pkg = 0; pkg < Packages.Num(); pkg++)
+			{
+				UnPackage *Package2 = Packages[pkg];
+				// load specific object(s)
+				int idx = -1;
+				while (true)
+				{
+					idx = Package2->FindExport(objName, className, idx + 1);
+					if (idx == INDEX_NONE) break;		// not found in this package
+
+					found++;
+					totalFound++;
+					appPrintf("Export \"%s\" was found in package \"%s\"\n", objName, *Package2->GetFilename());
+
+					// create object from package
+					UObject *Obj = Package2->CreateExport(idx);
+					if (Obj)
+					{
+						Objects_out.Add(Obj);
+						if (objName == attachAnimName && (Obj->IsA("MeshAnimation") || Obj->IsA("AnimSet")))
+							GForceAnimSet = Obj;
+					}
+				}
+				if (found) break;
+			}
+			if (!found)
+			{
+				appPrintf("Export \"%s\" was not found in specified package(s)\n", objName);
+				exit(1);
+			}
+		}
+		appPrintf("Found %d object(s)\n", totalFound);
+	}
+	else if (bShouldLoadObjects)
+	{
+		// fully load all packages
+		for (int pkg = 0; pkg < Packages.Num(); pkg++)
+			LoadWholePackage(Packages[pkg]);
+	}
+	UObject::EndLoad();
+  return GForceAnimSet;
+}
+
 
 /*-----------------------------------------------------------------------------
 	Class statistics

@@ -176,7 +176,7 @@ public:
 
 	virtual ~FPakVFS()
 	{
-		delete Reader;
+		if (Reader) delete Reader;
 //		if (HashTable) delete[] HashTable;
 	}
 

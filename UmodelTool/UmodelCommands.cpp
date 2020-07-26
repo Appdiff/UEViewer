@@ -8,6 +8,8 @@
 #include "Exporters/Exporters.h"
 #include "UmodelApp.h"
 
+#include "UmodelCommands.h"
+
 
 bool ExportObjects(const TArray<UObject*> *Objects, IProgressCallback* progress)
 {
@@ -151,6 +153,29 @@ static void CopyStream(FArchive *Src, FILE *Dst, int Count)
 	unguard;
 }
 
+void ListPackages(const TArray<UnPackage*> &Packages) {
+	guard(List);
+
+	for (int packageIndex = 0; packageIndex < Packages.Num(); packageIndex++)
+	{
+		UnPackage* Package = Packages[packageIndex];
+		if (Packages.Num() > 1)
+		{
+			appPrintf("\n%s\n", *Package->GetFilename());
+		}
+		// dump package exports table
+		for (int i = 0; i < Package->Summary.ExportCount; i++)
+		{
+			const FObjectExport &Exp = Package->ExportTable[i];
+			appPrintf("%4d %8X %8X %s %s\n", i, Exp.SerialOffset, Exp.SerialSize, Package->GetObjectName(Exp.ClassIndex), *Exp.ObjectName);
+		}
+	}
+
+	unguard;
+
+  return;
+}
+
 void SavePackages(const TArray<const CGameFileInfo*>& Packages, IProgressCallback* Progress)
 {
 	guard(SavePackages);
@@ -189,6 +214,10 @@ void SavePackages(const TArray<const CGameFileInfo*>& Packages, IProgressCallbac
 					file->GetCleanName(Name);
 					appSprintf(ARRAY_ARG(OutFile), "%s/%s", *GSettings.SavePackages.SavePath, *Name);
 				}
+        if (appGetFileType(OutFile))
+        {
+          appPrintf("WARNING: File already exists: %s\n", OutFile);
+        }
 				appMakeDirectoryForFile(OutFile);
 				FILE *out = fopen(OutFile, "wb");
 				// copy data

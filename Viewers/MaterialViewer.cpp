@@ -26,7 +26,7 @@ static void OutlineMaterial(UObject *Obj, int indent = 0);
 	Main code
 -----------------------------------------------------------------------------*/
 
-void CMaterialViewer::ProcessKey(int key)
+void CMaterialViewer::ProcessKey(unsigned key)
 {
 	guard(CObjectViewer::ProcessKey);
 	switch (key)

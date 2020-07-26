@@ -81,6 +81,12 @@ void appPrintProfiler(const char* label = NULL);
 
 extern char GRootDirectory[];
 
+template<int N> class FStaticString;
+struct CGameFileInfo;
+void appGetGameFileInfo(TArray<const CGameFileInfo*> &out);
+UObject *appLoadObjects(TArray<UObject*> &out, const TArray<UnPackage*> &Packages, TArray<const char*> &objectsToLoad, const char *argClassName, const char *attachAnimName, bool ShouldLoad);
+void appLoadPackages(TArray<UnPackage*> &out, TArray<FStaticString<256>> &FilePaths, bool ShouldLoad);
+bool appScanRoot(TArray<FStaticString<256>> &FilePaths, const char *dir, TArray<const char*> &packagesToLoad, bool recurse = true);
 void appSetRootDirectory(const char *dir, bool recurse = true);
 // Set root directory from package file name
 void appSetRootDirectory2(const char *filename);
@@ -2625,6 +2631,8 @@ bool UE4EncryptedPak();
 /*-----------------------------------------------------------------------------
 	UE4 support
 -----------------------------------------------------------------------------*/
+
+extern TArray<CGameFileInfo*> GameFiles;
 
 #if UNREAL4
 

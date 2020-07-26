@@ -495,6 +495,12 @@ void FArchive::Printf(const char *fmt, ...)
 
 	#endif
 
+#elif __APPLE__
+
+  #define fopen64 fopen
+  #define fseeko64 fseeko
+  #define ftello64 ftello
+
 #endif // _WIN32
 
 FFileArchive::FFileArchive(const char *Filename, unsigned InOptions)

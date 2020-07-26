@@ -76,6 +76,7 @@ last_revision=${last_revision##* }		# cut "#define ..."
 # force PLATFORM=linux under Linux OS
 [ "$OSTYPE" == "linux-gnu" ] || [ "$OSTYPE" == "linux" ] && PLATFORM="linux"
 #[ "$PLATFORM" == "linux" ] && PLATFORM="linux64"
+[[ "$OSTYPE" =~ ^darwin[0-9]+$ ]] && PLATFORM="darwin"
 
 if [ "${PLATFORM:0:3}" == "vc-" ]; then
 	# Visual C++ compiler
@@ -187,6 +188,9 @@ case "$PLATFORM" in
 	"mingw32"|"cygwin")
 		PATH=/bin:/usr/bin:$PATH					# configure paths for Cygwin
 		gccfilt make -f $makefile $target || exit 1
+		;;
+  darwin*)
+		make -j 4 -f $makefile $target || exit 1	# use 4 jobs for build
 		;;
 	linux*)
 		make -j 4 -f $makefile $target || exit 1	# use 4 jobs for build

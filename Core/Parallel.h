@@ -45,7 +45,11 @@ protected:
 	enum { CriticalSectionSize = sizeof(void*)*4 + sizeof(int)*2 }; // sizeof(RTL_CRITICAL_SECTION)
 	char data[CriticalSectionSize];
 #else
+# ifdef __APPLE__
+	enum { MutexSize = 64 }; // __SIZEOF_PTHREAD_MUTEX_T
+# else
 	enum { MutexSize = 40 }; // __SIZEOF_PTHREAD_MUTEX_T
+# endif
 	size_t data[MutexSize / sizeof(size_t)];
 #endif
 #if TRACY_DEBUG_MUTEX
@@ -249,6 +253,11 @@ FORCEINLINE int32 InterlockedAdd(volatile int64* Value, int64 Amount)
 }
 
 FORCEINLINE int32 InterlockedAdd(volatile uint64* Value, int64 Amount)
+{
+	return __sync_fetch_and_add(Value, Amount);
+}
+
+FORCEINLINE int32 InterlockedAdd(volatile size_t* Value, int64 Amount)
 {
 	return __sync_fetch_and_add(Value, Amount);
 }

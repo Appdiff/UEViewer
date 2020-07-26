@@ -636,6 +636,10 @@ void appDumpStackTrace(const address_t* buffer, int depth);
 
 inline void appInitPlatform() {}
 
+#if HAS_UI
+void appCopyTextToClipboard(const char* text);
+#endif
+
 inline int appCaptureStackTrace(address_t* buffer, int maxDepth, int framesToSkip) {}
 inline void appDumpStackTrace(const address_t* buffer, int depth) {}
 

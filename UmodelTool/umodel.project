@@ -18,6 +18,9 @@ INCLUDES += $UMODEL UI
 !if "$IS_WINDOWS" eq "1"
 	DEFINES += HAS_UI=1
 !endif
+#!if "$PLATFORM" eq "darwin"
+#	DEFINES += HAS_UI=1
+#!endif
 
 sources(MAIN) = {
 	Exporters/*.cpp
@@ -36,6 +39,9 @@ sources(MAIN) = {
 	UI/*.cpp
 	$UMODEL/res/umodel.rc
 !endif
+#!if "$PLATFORM" eq "darwin"
+#	UI/*.cpp
+#!endif
 }
 
 target(executable, $PRJ, MAIN + COMP_LIBS + UE4_LIBS + IMG_LIBS + NV_LIBS + MOBILE_LIBS, MAIN)

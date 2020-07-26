@@ -3,10 +3,10 @@
 
 #define USE_GLSL			1			//?? move to Build.h ?
 
-#include "Win32Types.h"
-
 #include <GL/gl.h>
 #include <GL/glext.h>
+
+#include "Win32Types.h"
 
 #define USE_SDL			1
 #include "GLBind.h"
