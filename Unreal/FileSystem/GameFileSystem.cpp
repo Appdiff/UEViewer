@@ -151,7 +151,7 @@ static bool FindExtension(const char *Ext, const char **ExtensionsList, int NumE
 }
 
 
-TArray<CGameFileInfo*> GameFiles;
+static TArray<CGameFileInfo*> GameFiles;
 int GNumPackageFiles = 0;
 int GNumForeignFiles = 0;
 
@@ -320,7 +320,7 @@ int RegisterGameFolder(const char* FolderName)
 		{
 			// Found
 			return index;
-		}
+    }
 		index = info.HashNext;
 	}
 
@@ -770,17 +770,15 @@ void appLoadPackages(TArray<UnPackage*> &Packages_out,
 		});*/
 #endif // UNREAL4
 
-  //for (int i=0; i<FilePaths.Num(); ++i)
   for (int i=0; i<GameFiles.Num(); ++i)
   {
   	TArray<const CGameFileInfo*> Files;
-  	//appFindGameFiles(*FilePaths[i], Files);
     FString filename;
     GameFiles[i]->GetCleanName(filename);
   	appFindGameFiles(*filename, Files);
     if (Files.Num() && bShouldLoadPackages)
   	{
-  		UnPackage* Package = UnPackage::LoadPackage(Files[0]);
+      UnPackage* Package = UnPackage::LoadPackage(Files[0], true);
       if (Package) Packages_out.Add(Package);
 		}
   }

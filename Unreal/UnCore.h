@@ -2632,8 +2632,6 @@ bool UE4EncryptedPak();
 	UE4 support
 -----------------------------------------------------------------------------*/
 
-extern TArray<CGameFileInfo*> GameFiles;
-
 #if UNREAL4
 
 class FStripDataFlags
