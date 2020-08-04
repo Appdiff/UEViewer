@@ -943,7 +943,7 @@ int CApplication::OnEvent(void *userdata, SDL_Event *evt)
 
 // localized keyboard could return different chars for some keys - should translate them back to English keyboard
 // note: there is no scancodes in SDL1.2
-static int TranslateKey(unsigned sym, unsigned scan)
+static int TranslateKey(int sym, int scan)
 {
 	static const struct
 	{

@@ -9,11 +9,7 @@
 
 // Good reference: UE4/Engine/Source/Runtime/Core/Public/Windows/MinimalWindowsApi.h
 
-#ifdef __APPLE__
-# define __stdcall
-#endif
-
-#if defined(_WIN32) || defined(__APPLE__)
+#if _WIN32
 #	ifndef APIENTRY
 #		define APIENTRY __stdcall
 #	endif
@@ -56,7 +52,7 @@
 #	ifndef CONST
 #		define CONST const
 #	endif
-#endif // _WIN32 || __APPLE__
+#endif // _WIN32
 
 
 #endif // __WIN32_TYPES_H__

@@ -16,7 +16,6 @@
 class UIMenu;
 class UIElement;
 class UIBaseDialog;
-class UIGroup;
 
 
 enum ETextAlign
@@ -279,21 +278,8 @@ private:
 // Notes:
 // - It will automatically add 'ThisClass' pointer as a first parameter of callback function
 // - SetCallback function name depends on VarName
-#if __GNUC__
-# define DECLARE_CALLBACK(VarName, ...)				\
-public:												\
-	typedef ::Callback<void(ThisClass*, ## __VA_ARGS__)> VarName##_t; \
-	template<typename CB>							\
-	FORCEINLINE ThisClass& Set##VarName(CB&& cb)	\
-	{												\
-		this->VarName = Detail::Forward<CB>(cb); return *this; \
-	}												\
-protected:											\
-	VarName##_t		VarName;						\
-private:
-#else
-# define DECLARE_CALLBACK(VarName, ...)				\
-public:												\
+#define DECLARE_CALLBACK(VarName, ...)				\
+  public:												\
 	typedef ::Callback<void(ThisClass*, __VA_ARGS__)> VarName##_t; \
 	template<typename CB>							\
 	FORCEINLINE ThisClass& Set##VarName(CB&& cb)	\
@@ -303,7 +289,6 @@ public:												\
 protected:											\
 	VarName##_t		VarName;						\
 private:
-#endif
 
 // Control creation helper.
 // Use this to receive 'Type&' value instead of 'Type*' available with 'new Type' call

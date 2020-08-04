@@ -210,11 +210,7 @@ CThread::~CThread()
 
 /*static*/ int CThread::CurrentId()
 {
-#ifdef __APPLE__
-  return reinterpret_cast<int64>(pthread_self()) >> 6;
-#else
 	return (int)pthread_self() >> 6;
-#endif
 }
 
 /*static*/ void CThread::Sleep(int milliseconds)

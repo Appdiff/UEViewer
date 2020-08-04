@@ -584,7 +584,7 @@ sub EmitCompilerDefs {
 			$platf .= " -mno-cygwin";
 		} elsif ($PLATFORM eq "unix32") {
 			$platf .= " -m32";
-		} elsif ($PLATFORM eq "unix64" || $PLATFORM eq "darwin") {
+		} elsif ($PLATFORM eq "unix64") {
 			$platf .= " -m64";
 		}
 		print "CPP  = \@$platf -pipe -c\n";
@@ -1116,7 +1116,6 @@ sub FlushObjectFile {
 		if ($srcType eq "asm") {
 			my $tgt = "elf32";
 			$tgt = "elf64" if $PLATFORM eq "unix64";
-      $tgt = "elf64" if $PLATFORM eq "darwin";
 			$tgt = "coff" if $PLATFORM eq "win32";
 			$line .= "nasm -f $tgt ".GenerateOptions($includes, "-I")." -o \"$objFile\"";
 		} elsif ($srcType eq "rc") {

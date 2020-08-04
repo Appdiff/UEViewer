@@ -3,8 +3,6 @@
 
 #define USE_GLSL			1			//?? move to Build.h ?
 
-#include "Win32Types.h"
-
 #ifndef __APPLE__
 #include <GL/gl.h>
 #include <GL/glext.h>
