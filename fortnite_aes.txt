@@ -1,0 +1,101 @@
+./umodel -pkginfo -game=ue4.26 -aes=$KEY -out=/appdiff/tmp/fortnite/07072020/out -path=/appdiff/tmp/fortnite/07072020/src/1000
+./umodel -save -game=ue4.26 -aes=$KEY -out=/appdiff/tmp/fortnite/07072020/save -path=/appdiff/tmp/fortnite/07072020/src/1000
+./umodel -export -png -game=ue4.26 -aes=$KEY -out=/appdiff/tmp/fortnite/07072020/export/1000 -path=/appdiff/tmp/fortnite/07072020/src/1000
+
+Fortnite+Release-13.20-CL-13777676-Mac
+
+0x7BDC194F9FF62879A96F0E8A8D1F2EE2EA37886D343BDDBE3C064C6E4D3D6B7C
+13.20 -- pakchunk1000-MacClient.pak
+
+0x0d6537d482a39cbb04b7cb010437d64370cf6d9ce92762667dbc58750f103d92
+13.20 -- pakchunk1001-MacClient.pak
+13.30 -- pakchunk1000-MacClient.pak
+
+0x8c464913e10053b543a3aa7a63ce1ee3ea77007c580568a7d78e07e0c8736924
+13.20 -- pakchunk1003-MacClient.pak
+
+0x7DEC1E6B26CE85B7680555F97064CEAA5C788DFDC674F98A6A711F726DEDB943
+13.20 -- pakchunk1006-MacClient.pak
+13.30 -- pakchunk1004-MacClient.pak
+
+0x5ac5d9a4cff5f8f4fec73a2b2faf392795c1d5da6fbfc20ea4e79e036465d731
+13.20 -- pakchunk1010-MacClient.pak
+13.30 -- pakchunk1009-MacClient.pak
+
+0xAC74FCFEECDC659D0437153D7712A9AFE71D01A8D9E4BE54D20787B7A3686612
+13.20 -- pakchunk1011-MacClient.pak
+
+0xFB96CB91BF492482413EB571CEF7E16F40A4294E084DFF12251446D78533C9F2
+13.20 -- pakchunk1013-MacClient.pak
+13.30 -- pakchunk1012-MacClient.pak
+
+
+
+13.20  --  0x7f851d7e72c27cb0bfd76878e249801373dec3c40707af9a0c93fd7fc5153dbf
+13.30  --  0x642CA35C21741BB86FEB40CE220693B60B04EEA685285E0A2D553D4631FD2AEC
+pakchunk0-MacClient.pak
+pakchunk10-MacClient.pak
+pakchunk10_s1-MacClient.pak
+pakchunk10_s2-MacClient.pak
+pakchunk10_s3-MacClient.pak
+pakchunk10_s4-MacClient.pak
+pakchunk10_s5-MacClient.pak
+pakchunk10_s6-MacClient.pak
+pakchunk10_s7-MacClient.pak
+pakchunk10_s8-MacClient.pak
+pakchunk10_s9-MacClient.pak
+pakchunk10_s10-MacClient.pak
+pakchunk10_s11-MacClient.pak
+pakchunk10_s12-MacClient.pak
+pakchunk10_s13-MacClient.pak
+pakchunk10_s14-MacClient.pak
+pakchunk10_s15-MacClient.pak
+pakchunk10_s16-MacClient.pak
+pakchunk10_s18-MacClient.pak
+pakchunk10_s17-MacClient.pak
+pakchunk10_s19-MacClient.pak
+
+
+
+
+pakchunk1002-MacClient.pak
+pakchunk1004-MacClient.pak
+pakchunk1005-MacClient.pak
+pakchunk1007-MacClient.pak
+pakchunk1008-MacClient.pak
+pakchunk1009-MacClient.pak
+pakchunk1012-MacClient.pak
+
+
+
+
+
+
+0x16C102FC9FD8DCF397EF06B4FFE4A89CB502A7EBBE307EDD92D036E4F1182E7B
+0X2BA4708C17ABF803AB821C0C89FA1CF3DFE7AA91D526D2E11526BC1AC4E34D13
+0x2dace7f864025613951b2f2267128f0f5f30a1d31692c67178439ad109cec935
+0x3f3717f4f206ff21bda8d3bf62b323556d1d2e7d9b0f7abd572d3cfe5b569fac
+0x4E55129097B7CBCE5F5BCDEB1CCCBE5EEA9C67141DB97701F327EDA4FA220EFA
+0x527E38042B86B62AEB29A6F413D4DE3B20D19D60BF261D61E3CF853A7E14AED0
+0x640408EA8EAD923441EA687B5703AC7F4C7D0C6C8401B199F2A954C52D5F566E
+0x6c51aba88ca1240a0d14eb94701f6c41fd7799b102e9060d1e6c316993196fdf
+0x71B2B2637BB1EB0ADD896CF675726AD7C289680626520059D9A66C7F3D541373
+0x724BF428442E0E971AE5C3F924B507F0AD5FFAD558BD9A6DA0CB06611EDFC435
+0xdcc3c6d54873f20e247e942323aaae74c310d3e6b01ccc5c87d3b0563f3ebc0c
+0xf19b282de4de7b3c63a08c6735f52b35feb55dfa8c10a7e7c936f7bb8a3f5fa8
+0xF8CB203531F8705D4CAF89A335565582C7F71818234A3627DB24599F67C4EF40
+
+
+
+
+Fortnite+Release-13.30-CL-13884087-Mac
+
+
+
+
+
+
+"\x7f\x85\x1d\x7e\x72\xc2\x7c\xb0\xbf\xd7\x68\x78\xe2\x49\x80\x13\x73\xde\xc3\xc4\x07\x07\xaf\x9a\x0c\x93\xfd\x7f\xc5\x15\x3d\xbf"
+
+
+
