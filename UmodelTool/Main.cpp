@@ -48,7 +48,9 @@
 // GSettings.Reset() will be called before main() executed.
 CUmodelSettings GSettings;
 
+#if THREADING
 extern bool GEnableThreads;
+#endif
 
 /*-----------------------------------------------------------------------------
 	Table of known Unreal classes
@@ -372,7 +374,9 @@ static void PrintUsage()
 #	if VSTUDIO_INTEGRATION
 			"    -debug          invoke system crash handler on errors\n"
 #	endif
+#	if THREADING
 			"    -nomt           disable multithreading optimizations\n"
+#	endif
 #endif // SHOW_HIDDEN_SWITCHES
 			"\n"
 			"Options:\n"
@@ -793,10 +797,12 @@ int main(int argc, const char **argv)
 			PrintVersionInfo();
 			return 0;
 		}
+#if THREADING
 		else if (!stricmp(opt, "nomt"))
 		{
 			GEnableThreads = false;
 		}
+#endif
 		else if (!stricmp(opt, "testexport"))
 		{
 			mainCmd = CMD_Export;
@@ -889,6 +895,7 @@ int main(int argc, const char **argv)
 		return 0;					// already displayed when loaded package; extend it?
 	}
 
+<<<<<<< HEAD
   bShouldLoadObjects = (mainCmd != CMD_Export) || (objectsToLoad.Num() > 0);
 	TArray<UObject*> Objects;
   GForceAnimSet = appLoadObjects(Objects,
@@ -898,6 +905,70 @@ int main(int argc, const char **argv)
                                  attachAnimName,
                                  bShouldLoadObjects);
 	if (!UObject::GObjObjects.Num() && bShouldLoadObjects)
+=======
+	bool bShouldLoadObjects = (mainCmd != CMD_Export) || (objectsToLoad.Num() > 0);
+
+	// load requested objects if any, or fully load everything
+	UObject::BeginLoad();
+	if (objectsToLoad.Num())
+	{
+		// selectively load objects
+		int totalFound = 0;
+		for (int objIdx = 0; objIdx < objectsToLoad.Num(); objIdx++)
+		{
+			const char *objName   = objectsToLoad[objIdx];
+			const char *className = (objIdx == 0) ? argClassName : NULL;
+			int found = 0;
+			for (int pkg = 0; pkg < Packages.Num(); pkg++)
+			{
+				UnPackage *Package2 = Packages[pkg];
+				// load specific object(s)
+				int idx = -1;
+				while (true)
+				{
+					idx = Package2->FindExport(objName, className, idx + 1);
+					if (idx == INDEX_NONE) break;		// not found in this package
+
+					found++;
+					totalFound++;
+					appPrintf("Export \"%s\" was found in package \"%s\"\n", objName, *Package2->GetFilename());
+
+					// create object from package
+					UObject *Obj = Package2->CreateExport(idx);
+					if (Obj)
+					{
+						Objects.Add(Obj);
+#if RENDERING
+						if (objName == attachAnimName && (Obj->IsA("MeshAnimation") || Obj->IsA("AnimSet")))
+							GForceAnimSet = Obj;
+#endif
+					}
+				}
+				if (found) break;
+			}
+			if (!found)
+			{
+				appPrintf("Export \"%s\" was not found in specified package(s)\n", objName);
+				exit(1);
+			}
+		}
+		appPrintf("Found %d object(s)\n", totalFound);
+	}
+	else if (bShouldLoadObjects)
+	{
+		// fully load all packages
+		for (int pkg = 0; pkg < Packages.Num(); pkg++)
+			LoadWholePackage(Packages[pkg]);
+	}
+	UObject::EndLoad();
+
+	bool bNoSupportedObjects = !UObject::GObjObjects.Num() && bShouldLoadObjects;
+#if HAS_UI
+	bNoSupportedObjects &= !GApplication.GuiShown;
+#endif
+
+	if (bNoSupportedObjects)
+>>>>>>> 7b26effe1f8a24a521c95b68eab02b5346a8f05a
 	{
 		appPrintf("\nThe specified package(s) has no supported objects.\n\n");
 		appPrintf("Selected package(s):\n");
@@ -928,7 +999,19 @@ int main(int argc, const char **argv)
 		{
 			ExportPackages(Packages);
 		}
+<<<<<<< HEAD
   }
+=======
+#if HAS_UI || RENDERING
+		if (!GApplication.GuiShown)
+			return 0;
+		// switch to a viewer in GUI mode
+		mainCmd = CMD_View;
+#else
+		return 0;
+#endif
+	}
+>>>>>>> 7b26effe1f8a24a521c95b68eab02b5346a8f05a
 
 #if RENDERING
   if (mainCmd == CMD_Dump)

@@ -43,7 +43,7 @@ namespace nv
 		}
 		FORCEINLINE void * realloc(void * ptr, size_t size)
 		{
-			appRealloc(ptr, size);
+			return appRealloc(ptr, size);
 		}
 #else
 		NVCORE_API void * malloc(size_t size);
@@ -60,7 +60,7 @@ namespace nv
 
 // Override new/delete
 
-FORCEINLINE void * operator new (size_t size) throw()
+FORCEINLINE void * operator new (size_t size) //throw()
 {
 #if UMODEL
 	return appMalloc(size, 8, true);
@@ -69,7 +69,7 @@ FORCEINLINE void * operator new (size_t size) throw()
 #endif
 }
 
-FORCEINLINE void operator delete (void *p) throw()
+FORCEINLINE void operator delete (void *p) //throw()
 {
 #if UMODEL
 	return appFree(p);
@@ -78,7 +78,7 @@ FORCEINLINE void operator delete (void *p) throw()
 #endif
 }
 
-FORCEINLINE void * operator new [] (size_t size) throw()
+FORCEINLINE void * operator new [] (size_t size) //throw()
 {
 #if UMODEL
 	return appMalloc(size, 8, true);
@@ -87,7 +87,7 @@ FORCEINLINE void * operator new [] (size_t size) throw()
 #endif
 }
 
-FORCEINLINE void operator delete [] (void * p) throw()
+FORCEINLINE void operator delete [] (void * p) //throw()
 {
 #if UMODEL
 	return appFree(p);

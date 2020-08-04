@@ -1,4 +1,14 @@
 #include "Core.h"
+
+#if THREADING
+
+#ifdef _WIN32
+
+#include <Windows.h>
+#include <process.h> // _beginthread
+
+#endif // _WIN32
+
 #include "Parallel.h"
 
 bool GEnableThreads = true;
@@ -9,10 +19,7 @@ volatile int CThread::NumThreads = 0;
 	Generic classes
 -----------------------------------------------------------------------------*/
 
-#ifdef _WIN32
-
-#include <Windows.h>
-#include <process.h> // _beginthread
+#if _WIN32
 
 // Windows.h has InterlockedIncrement/Decrement defines, hide then
 #undef InterlockedIncrement
@@ -231,11 +238,20 @@ CThread::~CThread()
 		CThread* thread = (CThread*)param;
 		thread->Run();
 	} CATCH_CRASH {
-		// Note: if multiple threads will crash, they'll corrupt error history with
-		// simultaneous writing to GError.
-		//todo: there's no build number displayed, Core has no access to version string
-		appPrintf("Exception in thread %d: ", CurrentId());
+		// Lock other threads - only one will raise the error
+		//todo: Note: if multiple threads will crash, they'll corrupt error history with
+		//   simultaneous writing to GError.
+		//todo: drop appNotify context, it's meaningless in thread
+		static volatile int lock;
+		if (InterlockedAdd(&lock, 1) != 0)
+		{
+			while (true) Sleep(1000);
+		}
+
+		appPrintf("\nException in thread %d:\n", CurrentId());
 		GError.StandardHandler();
+
+		//todo: there's no build number displayed, Core has no access to version string
 		exit(1);
 	}
 }
@@ -510,6 +526,12 @@ void Shutdown()
 {
 	guard(ThreadPool::Shutdown);
 
+	if (GError.HasError())
+	{
+		// Do not bother the proper shutdown of threading system in a case of error
+		return;
+	}
+
 	WaitForCompletion();
 	int NumThreadsAfterShutdown = CThread::NumThreads - Pool::NumPoolThreads;
 
@@ -546,13 +568,15 @@ namespace ParallelForImpl
 
 ParallelForBase::ParallelForBase(int inCount)
 : numActiveThreads(0)
+, bAllSentToThreads(false)
 , currentIndex(0)
 , lastIndex(inCount)
 {}
 
 ParallelForBase::~ParallelForBase()
 {
-	// Wait for completion
+	// Wait for completion: the last thread which will complete the job will
+	// signal 'endSignal' about completion.
 	if (numActiveThreads)
 	{
 		guard(ParallelForWait);
@@ -572,13 +596,14 @@ void ParallelForBase::Start(ThreadPool::ThreadTask worker)
 	step = (lastIndex + stepDivisor - 1) / stepDivisor;
 	if (step < 20) step = 20; //?? should override for slow tasks, e.g. processing 10 items 1 second each
 
+	// Divide index count by 'step' with rounding up
 	int numThreads = (lastIndex + step - 1) / step;
 
 	// Recompute step to avoid having tiny last step
 	step = (lastIndex + numThreads - 1) / numThreads;
 	assert(step > 0);
 
-	// Clamp numThreads
+	// Clamp numThreads by available thread count
 	if (numThreads > maxThreads)
 		numThreads = maxThreads;
 
@@ -587,14 +612,33 @@ void ParallelForBase::Start(ThreadPool::ThreadTask worker)
 #endif
 
 	// Allocate threads, exclude 1 thread for the thread executing ParallelFor
-	for (int i = 0; i < numThreads - 1; i++)
+
+	// Reserve 1 "active thread", so if the 1st spawned thread will finish the job before
+	// we'll be able to spawn anything else - it won't send "completed" signal.
+	InterlockedIncrement(&numActiveThreads);
+
+	// Spawn as many threads as planned. Stop allocating new threads if job will be completed
+	// faster than planned (verify bAllSentToThreads as a loop condition).
+	for (int i = 0; i < numThreads - 1 && !bAllSentToThreads; i++)
 	{
+		// Just in case, increment thread count before starting a thread, so we'll avoid
+		// the situation when worker thread will execute everything before we'll return
+		// to the invoker (main) thread and increment count.
+		InterlockedIncrement(&numActiveThreads);
 		if (!ThreadPool::ExecuteInThread(worker, this))
 		{
-			break; // all threads were allocated
+			// All threads has been allocated, can't spawn more.
+			// Decrement the thread count as we've failed to use new thread.
+			InterlockedDecrement(&numActiveThreads);
+			break;
 		}
-		InterlockedIncrement(&numActiveThreads);
 	}
+
+	// Remove thread "reservation". If at this moment everything has been completed, the
+	// value goes to zero, and we'll not perform waiting for completion in destructor. If
+	// something is still works, then we'll wait, and the worker thread will send a signal
+	// when count finally decremented to 0.
+	InterlockedDecrement(&numActiveThreads);
 }
 
 bool ParallelForBase::GrabInterval(int& idx1, int& idx2)
@@ -602,7 +646,11 @@ bool ParallelForBase::GrabInterval(int& idx1, int& idx2)
 	CMutex::ScopedLock lock(mutex);
 	idx1 = currentIndex;
 	if (idx1 >= lastIndex)
-		return false; // all done
+	{
+		// All items were sent to threads
+		bAllSentToThreads = true;
+		return false;
+	}
 	idx2 = idx1 + step;
 	if (idx2 > lastIndex)
 		idx2 = lastIndex;
@@ -614,3 +662,5 @@ bool ParallelForBase::GrabInterval(int& idx1, int& idx2)
 }
 
 } // namespace ParallelForImpl
+
+#endif // THREADING

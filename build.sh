@@ -75,6 +75,7 @@ last_revision=${last_revision##* }		# cut "#define ..."
 
 # force PLATFORM=linux under Linux OS
 [ "$OSTYPE" == "linux-gnu" ] || [ "$OSTYPE" == "linux" ] && PLATFORM="linux"
+[[ "$OSTYPE" == "darwin"* ]] && PLATFORM=osx
 #[ "$PLATFORM" == "linux" ] && PLATFORM="linux64"
 [[ "$OSTYPE" =~ ^darwin[0-9]+$ ]] && PLATFORM="darwin"
 
@@ -194,6 +195,9 @@ case "$PLATFORM" in
 		;;
 	linux*)
 		make -j 4 -f $makefile $target || exit 1	# use 4 jobs for build
+		;;
+	osx)
+		make -f $makefile $target || exit 1
 		;;
 	*)
 		echo "Unknown PLATFORM=\"$PLATFORM\""

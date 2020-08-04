@@ -3,10 +3,8 @@
 
 
 #include "Core.h"
+#include "GLText.h"
 
-#if _WIN32
-#include "Win32Types.h"
-#endif
 
 /*-----------------------------------------------------------------------------
 	Application class
@@ -67,54 +65,38 @@ extern bool  vpInvertXAxis;
 extern CVec3 viewOrigin;
 extern CAxis viewAxis;
 
-extern bool GShowDebugInfo;
+
+// Draw text at 3D space, with arbitrary color
+void DrawText3D(const CVec3 &pos, unsigned color, const char* text, ...);
 
 
-/*-----------------------------------------------------------------------------
-	Text output
------------------------------------------------------------------------------*/
-
-#undef RGB					// defined in windows headers
-
-// constant colors
-#define RGBA(r,g,b,a)		( (unsigned)((r)*255) | ((unsigned)((g)*255)<<8) | ((unsigned)((b)*255)<<16) | ((unsigned)((a)*255)<<24) )
-#define RGB(r,g,b)			RGBA(r,g,b,1)
-#define RGB255(r,g,b)		( (unsigned) ((r) | ((g)<<8) | ((b)<<16) | (255<<24)) )
-#define RGBA255(r,g,b,a)	( (r) | ((g)<<8) | ((b)<<16) | ((a)<<24) )
-
-// computed colors
-//?? make as methods; or - constructor of CColor
-#define RGBAS(r,g,b,a)		(appRound((r)*255) | (appRound((g)*255)<<8) | (appRound((b)*255)<<16) | (appRound((a)*255)<<24))
-#define RGBS(r,g,b)			(appRound((r)*255) | (appRound((g)*255)<<8) | (appRound((b)*255)<<16) | (255<<24))
-
-
-void DrawTextLeft(const char *text, ...);
-void DrawTextRight(const char *text, ...);
-void DrawTextBottomLeft(const char *text, ...);
-void DrawTextBottomRight(const char *text, ...);
-void DrawText3D(const CVec3 &pos, unsigned color, const char *text, ...);
-
-enum ETextAnchor
-{
-	TA_TopLeft,			// DrawTextLeft
-	TA_TopRight,		// DrawTextRight
-	TA_BottomLeft,
-	TA_BottomRight,
-
-	// internally used values
-	TA_None,
-	TA_Last
-};
-
-void DrawText(ETextAnchor anchor, const char *text, ...);
-void DrawText(ETextAnchor anchor, unsigned color, const char *text, ...);
-
-void FlushTexts();
-
-// called from AppDisplayTexts() callback
-#define KEY_HELP_TAB	11
+// Display help about particular ket, should be called from AppDisplayTexts()
+#define KEY_HELP_TAB	14
 void DrawKeyHelp(const char *Key, const char *Help);
 
+/*-----------------------------------------------------------------------------
+	Viewport
+-----------------------------------------------------------------------------*/
+
+namespace Viewport
+{
+
+struct Point
+{
+	int X;
+	int Y;
+};
+
+// Viewport size
+extern Point Size;
+
+extern Point MousePos;
+
+extern int MouseButtons;
+
+extern int MouseButtonsDelta;
+
+} // namespace Viewport
 
 /*-----------------------------------------------------------------------------
 	Keyboard

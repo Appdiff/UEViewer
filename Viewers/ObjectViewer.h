@@ -1,6 +1,8 @@
 #ifndef __OBJECT_VIEWER_H__
 #define __OBJECT_VIEWER_H__
 
+#if RENDERING
+
 #include "GlWindow.h"
 
 
@@ -33,8 +35,10 @@ class CObjectViewer
 public:
 	UObject*		Object;
 	CApplication*	Window;
+	const UObject*	JumpAfterFrame;
 
 	CObjectViewer(UObject* Obj, CApplication* Win);
+
 	virtual ~CObjectViewer()
 	{}
 
@@ -58,6 +62,11 @@ public:
 
 	virtual void Draw3D(float TimeDelta)
 	{}
+
+	void JumpTo(const UObject* Object)
+	{
+		JumpAfterFrame = Object;
+	}
 };
 
 
@@ -81,6 +90,10 @@ public:
 
 	virtual void Draw2D() override;
 	virtual void Draw3D(float TimeDelta) override;
+
+protected:
+	void FlushProps();
+	void OutlineMaterial(UObject *Obj, int indent = 0);
 };
 
 
@@ -116,6 +129,8 @@ public:
 
 	virtual void DrawMesh(CMeshInstance *Inst);
 
+	// Print a text about mesh material. Automatically highlights material if mouse points
+	// at its text record on screen.
 	void PrintMaterialInfo(int Index, UUnrealMaterial *Material, int NumFaces);
 
 	void DisplayUV(const CMeshVertex* Verts, int VertexSize, const CBaseMeshLod* Mesh, int UVIndex);
@@ -260,5 +275,7 @@ private:
 	}
 
 #endif
+
+#endif // RENDERING
 
 #endif // __OBJECT_VIEWER_H__

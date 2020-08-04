@@ -1,8 +1,11 @@
 #ifndef __UMODEL_APP_H__
 #define __UMODEL_APP_H__
 
-#include "Viewers/ObjectViewer.h"
 #include "UmodelSettings.h"
+
+#if RENDERING || HAS_UI
+
+#include "Viewers/ObjectViewer.h"
 
 class UIMenu;
 class UIMenuItem;
@@ -39,6 +42,8 @@ public:
 	// dir = 1 - forward direction for search, dir = -1 - backward.
 	// When forceVisualizer is true, dummy visualizer will be created if no supported object found
 	bool FindObjectAndCreateVisualizer(int dir, bool forceVisualizer = false, bool newPackage = false);
+	// Jump to selected object without checking for view filters.
+	void VisualizeObject(int newIndex);
 
 	FORCEINLINE bool ObjectSupported(UObject *Obj)
 	{
@@ -73,8 +78,14 @@ protected:
 	virtual void WndProc(UINT msg, WPARAM wParam, LPARAM lParam);
 #endif
 
+	void GoBack();
+	void GoForward();
+
 	int			ObjIndex;			// index of the current object in UObject::GObjObjects array
 	int			DoScreenshot;
+
+	TArray<int>	BrowseHistory;
+	int			CurrentHistoryItem;
 
 public:
 	bool		GuiShown;
@@ -86,6 +97,8 @@ public:
 };
 
 extern CUmodelApp GApplication;
+
+#endif // RENDERING || HAS_UI
 
 // Main.cpp functions
 void InitClassAndExportSystems(int Game);

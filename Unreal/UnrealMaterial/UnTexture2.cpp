@@ -175,8 +175,7 @@ static bool ReadXprFile(const CGameFileInfo *file)
 //		appPrintf("  %08X [%08X]  %s\n", Entry->DataOffset, Entry->DataSize, Entry->Name);
 #endif
 		Ar->Seek(Entry->DataOffset);
-    // stredwick
-		unsigned int id;
+		uint32 id;
 		*Ar << id;
 		switch (id)
 		{

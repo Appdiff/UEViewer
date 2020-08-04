@@ -328,7 +328,7 @@ public:
 	Some enums used to distinguish game, engine and platform
 -----------------------------------------------------------------------------*/
 
-#define GAME_UE4(x)				(GAME_UE4_BASE + (x << 4))
+#define GAME_UE4(x)				(GAME_UE4_BASE + ((x) << 4))
 #define GAME_UE4_GET_MINOR(x)	((x - GAME_UE4_BASE) >> 4)	// reverse operation for GAME_UE4(x)
 
 enum EGame
@@ -455,6 +455,8 @@ enum EGame
 		// Add custom UE4 game engines here
 		// 4.5
 		GAME_Ark = GAME_UE4(5)+1,
+		// 4.6
+		GAME_FableLegends = GAME_UE4(6)+1,
 		// 4.8
 		GAME_HIT = GAME_UE4(8)+1,
 		// 4.10

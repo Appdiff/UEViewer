@@ -20,6 +20,7 @@
 
 #if __GNUC__
 #	include <wchar.h>
+#	include <stdint.h>
 #endif
 
 #ifdef TRACY_ENABLE
@@ -156,8 +157,12 @@ typedef unsigned __int64		uint64;
 #	undef VSTUDIO_INTEGRATION
 #	undef WIN32_USE_SEH
 
-typedef signed long long		int64;
-typedef unsigned long long		uint64;
+// Previous definitions:
+//   typedef signed long long		int64;
+//   typedef unsigned long long		uint64;
+// However this fails conversion from size_t to uint64 in gcc and clang, so we're new using standard types from 'stdint.h'
+typedef int64_t					int64;
+typedef uint64_t				uint64;
 
 #else
 
@@ -207,18 +212,6 @@ typedef size_t					address_t;
 #ifndef ROR32
 #define ROR32(val,shift)		( (unsigned(val) >> (shift)) | (unsigned(val) << (32-(shift))) )
 #endif
-
-
-#define COLOR_ESCAPE	'^'		// could be used for quick location of color-processing code
-
-#define S_BLACK			"^0"
-#define S_RED			"^1"
-#define S_GREEN			"^2"
-#define S_YELLOW		"^3"
-#define S_BLUE			"^4"
-#define S_MAGENTA		"^5"
-#define S_CYAN			"^6"
-#define S_WHITE			"^7"
 
 
 // Using size_t typecasts - that's platform integer type
@@ -356,6 +349,10 @@ FORCEINLINE void* appMallocNoInit(int size, int alignment = 8)
 
 void appFree(void *ptr);
 
+#ifndef __APPLE__
+
+// C++ specs doesn't allow inlining of operator new/delete:  https://en.cppreference.com/w/cpp/memory/new/operator_new
+// All compilers are fine with that, except clang on macos. For this case we're providing "static" declaration deparately.
 
 FORCEINLINE void* operator new(size_t size)
 {
@@ -372,13 +369,16 @@ FORCEINLINE void operator delete(void* ptr)
 	appFree(ptr);
 }
 
-// C++17 (delete with alignment)
-FORCEINLINE void operator delete(void* ptr, size_t)
+FORCEINLINE void operator delete[](void* ptr)
 {
 	appFree(ptr);
 }
 
-FORCEINLINE void operator delete[](void* ptr)
+#endif // __APPLE__
+
+
+// C++17 (delete with alignment)
+FORCEINLINE void operator delete(void* ptr, size_t)
 {
 	appFree(ptr);
 }
@@ -523,7 +523,7 @@ struct CErrorContext
 	// Determines if this is an exception or appError throwed
 	bool IsSwError;
 	// Used for error history formatting
-	bool WasError;
+	bool FmtNeedArrow;
 	// Suppress logging error message to a file (in a case of user mistake)
 	bool SuppressLog;
 	// Call stack
@@ -532,6 +532,11 @@ struct CErrorContext
 	CErrorContext()
 	{
 		Reset();
+	}
+
+	bool HasError() const
+	{
+		return History[0] != 0;
 	}
 
 	void Reset()
@@ -636,11 +641,7 @@ void appDumpStackTrace(const address_t* buffer, int depth);
 
 inline void appInitPlatform() {}
 
-#if HAS_UI
-void appCopyTextToClipboard(const char* text);
-#endif
-
-inline int appCaptureStackTrace(address_t* buffer, int maxDepth, int framesToSkip) {}
+inline int appCaptureStackTrace(address_t* buffer, int maxDepth, int framesToSkip) { return 0; }
 inline void appDumpStackTrace(const address_t* buffer, int depth) {}
 
 #endif // _WIN32

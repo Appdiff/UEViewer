@@ -866,6 +866,9 @@ struct FMultisizeIndexContainer
 		}
 		else
 		{
+#if FABLE
+			if (Ar.Game == GAME_FableLegends && DataSize == 0) return Ar;
+#endif
 			// Some PARAGON meshes has DataSize=0, but works well when assuming this is 32-bit integers array
 			if (DataSize != 4)
 				appPrintf("WARNING: FMultisizeIndexContainer data size %d, assuming int32\n", DataSize);
@@ -1384,8 +1387,31 @@ struct FStaticLODModel4
 				}
 #endif // SOD2
 
+#if SEAOFTHIEVES
+				if (Ar.Game == GAME_SeaOfThieves)
+				{
+					int32 SomeArraySize;
+					Ar << SomeArraySize;
+					Ar.Seek(Ar.Tell() + SomeArraySize * 44);
+
+					TArray<int32> array1, array2, array3, array4;
+					Ar << array1 << array2;
+					Ar << array3 << array4;
+
+					Ar.Seek(Ar.Tell() + 13);
+				}
+#endif // SEAOFTHIEVES
+
 				if (!StripFlags.IsClassDataStripped(CDSF_AdjacencyData))
 					Ar << Lod.AdjacencyIndexBuffer;
+
+#if FABLE
+				if (Ar.Game == GAME_FableLegends)
+				{
+					FMultisizeIndexContainer UnkIndices;
+					Ar << UnkIndices;
+				}
+#endif // FABLE
 
 				if (Ar.ArVer >= VER_UE4_APEX_CLOTH && Lod.HasClothData())
 					Ar << Lod.ClothVertexBuffer;
@@ -1412,9 +1438,8 @@ struct FStaticLODModel4
 #if SEAOFTHIEVES
 		if (Ar.Game == GAME_SeaOfThieves)
 		{
-			Ar.Seek(Ar.Tell() + 24);
-			FMultisizeIndexContainer indices1, indices2;
-			Ar << indices1 << indices2;
+			FMultisizeIndexContainer indices;
+			Ar << indices;
 		}
 #endif // SEAOFTHIEVES
 
@@ -2364,6 +2389,22 @@ struct FStaticMeshLODModel4
 				Ar << AreaWeightedSectionSamplers[i];
 			Ar << AreaWeightedSampler;
 		}
+
+#if FABLE
+		if (Ar.Game == GAME_FableLegends)
+		{
+			int32 unk1;
+			TArray<byte> unk2;
+			Ar << unk1;
+			unk2.BulkSerialize(Ar);
+			// Looks like color stream, but has different layout
+			FStripDataFlags UnkStrip(Ar);
+			int32 UnkNumVerts;
+			TArray<int32> UnkArray;
+			Ar << UnkNumVerts;
+			UnkArray.BulkSerialize(Ar);
+		}
+#endif // FABLE
 
 #if SEAOFTHIEVES
 		if (Ar.Game == GAME_SeaOfThieves) Ar.Seek(Ar.Tell()+17);

@@ -497,11 +497,12 @@ void FArchive::Printf(const char *fmt, ...)
 
 #elif __APPLE__
 
-  #define fopen64 fopen
-  #define fseeko64 fseeko
-  #define ftello64 ftello
+	// On Darwin, all file APIs are 64-bit
+	#define fopen64			fopen
+	#define fseeko64		fseeko
+	#define ftello64		ftell
 
-#endif // _WIN32
+#endif // _WIN32 / __APPLE__
 
 FFileArchive::FFileArchive(const char *Filename, unsigned InOptions)
 :	Options(InOptions)
@@ -1330,7 +1331,7 @@ void FByteBulkData::Serialize(FArchive &Ar)
 		{
 			if (BulkDataOffsetInFile + 16 >= Ar.GetFileSize64())
 			{
-				appNotify("FByteBulkData::Serialize: position is outside of the file (%d bytes)", BulkDataSizeOnDisk);
+				appPrintf("FByteBulkData::Serialize: position is outside of the file (%d bytes)\n", BulkDataSizeOnDisk);
 				// Prevent any possible use of this bulk
 				BulkDataFlags |= BULKDATA_Unused;
 				return;

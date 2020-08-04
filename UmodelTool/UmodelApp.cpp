@@ -1,7 +1,11 @@
-#include <SDL2/SDL_syswm.h>			// for SDL_SysWMinfo
-#undef UnregisterClass
-
 #include "Core.h"
+
+#if RENDERING
+
+#include <SDL2/SDL_syswm.h>			// for SDL_SysWMinfo, does <windows.h> includes
+#undef UnregisterClass
+#undef GetClassName
+
 #include "UnCore.h"
 #include "UnObject.h"
 #include "PackageUtils.h"
@@ -36,11 +40,13 @@ CUmodelApp GApplication;
 
 #define SCREENSHOTS_DIR		"Screenshots"
 
+#if MAX_DEBUG
+extern bool GShowShaderParams;
+#endif
+
 /*-----------------------------------------------------------------------------
 	Object visualizer support
 -----------------------------------------------------------------------------*/
-
-#if RENDERING
 
 bool CUmodelApp::FindObjectAndCreateVisualizer(int dir, bool forceVisualizer, bool newPackage)
 {
@@ -50,6 +56,8 @@ bool CUmodelApp::FindObjectAndCreateVisualizer(int dir, bool forceVisualizer, bo
 	{
 		assert(dir > 0); // just in case
 		ObjIndex = -1;
+		BrowseHistory.Empty();
+		CurrentHistoryItem = 0;
 	}
 
 	int looped = 0;
@@ -95,12 +103,28 @@ bool CUmodelApp::FindObjectAndCreateVisualizer(int dir, bool forceVisualizer, bo
 		if (ObjectSupported(Obj))
 			break;
 	}
+
+	//todo: reuse VisualizeObject() function
 	// change visualizer
 	CreateVisualizer(Obj);
 #if HAS_MENU
 	UpdateObjectMenu();
 #endif
 	return true;
+
+	unguard;
+}
+
+
+void CUmodelApp::VisualizeObject(int newIndex)
+{
+	guard(CUmodelApp::VisualizeObject);
+
+	ObjIndex = newIndex;
+	CreateVisualizer(UObject::GObjObjects[newIndex]);
+#if HAS_MENU
+	UpdateObjectMenu();
+#endif
 
 	unguard;
 }
@@ -359,7 +383,8 @@ bool CUmodelApp::CreateVisualizer(UObject *Obj, bool test)
 		return true;								\
 	}
 	// create viewer for known class
-	bool showAll = !(ShowMeshes || ShowMaterials);
+	// note: when 'test' is not set, we'll create a visualizer in any case
+	bool showAll = !(ShowMeshes || ShowMaterials) || !test;
 	if (ShowMeshes || showAll)
 	{
 		CLASS_VIEWER(UVertMesh,       CVertMeshViewer, true);
@@ -502,7 +527,45 @@ void CUmodelApp::BeforeSwap()
 		DoScreenshot = 0;
 	}
 
+	if (Viewer->JumpAfterFrame)
+	{
+		// note: without "const_cast" FindItem won't compile
+		int NewObjectIndex = UObject::GObjObjects.FindItem(const_cast<UObject*>(Viewer->JumpAfterFrame));
+		Viewer->JumpAfterFrame = NULL;
+		if (NewObjectIndex >= 0)
+		{
+			// Remember current object
+			BrowseHistory.RemoveAt(CurrentHistoryItem, BrowseHistory.Num() - CurrentHistoryItem);
+			BrowseHistory.Add(ObjIndex);
+			CurrentHistoryItem = BrowseHistory.Num();
+			// Switch to object
+			VisualizeObject(NewObjectIndex);
+		}
+	}
+
 	unguard;
+}
+
+
+void CUmodelApp::GoBack()
+{
+	// Remember current item
+	if (CurrentHistoryItem == BrowseHistory.Num())
+		BrowseHistory.Add(ObjIndex);
+
+	if (CurrentHistoryItem > 0)
+	{
+		VisualizeObject(BrowseHistory[--CurrentHistoryItem]);
+	}
+}
+
+
+void CUmodelApp::GoForward()
+{
+	if (CurrentHistoryItem < BrowseHistory.Num() - 1)
+	{
+		VisualizeObject(BrowseHistory[++CurrentHistoryItem]);
+	}
 }
 
 
@@ -533,6 +596,12 @@ void CUmodelApp::ProcessKey(unsigned key, bool isDown)
 		break;
 	case 's'|KEY_ALT:
 		DoScreenshot = 2;
+		break;
+	case SPEC_KEY(LEFT)|KEY_ALT:
+		GoBack();
+		break;
+	case SPEC_KEY(RIGHT)|KEY_ALT:
+		GoForward();
 		break;
 	case 'x'|KEY_CTRL:
 #if HAS_UI
@@ -571,6 +640,14 @@ void CUmodelApp::ProcessKey(unsigned key, bool isDown)
 
 void CUmodelApp::DrawTexts()
 {
+#if 0
+	DrawTextBottomRight("History: [%d] <- %d", BrowseHistory.Num(), CurrentHistoryItem);
+	for (int i = 0; i < BrowseHistory.Num(); i++)
+	{
+		DrawTextBottomRight("[%d] = %s", i, UObject::GObjObjects[BrowseHistory[i]]->Name);
+	}
+#endif
+
 	guard(CUmodelApp::DrawTexts);
 	CApplication::DrawTexts();
 	if (IsHelpVisible)
@@ -582,6 +659,7 @@ void CUmodelApp::DrawTexts()
 #endif
 		DrawKeyHelp("Ctrl+X",	 "export object");
 		DrawKeyHelp("Ctrl+S",    "take screenshot");
+		DrawKeyHelp("Alt+Left/Right", "navigate history");
 		Viewer->ShowHelp();
 		DrawTextLeft("-----\n");		// divider
 	}
@@ -645,6 +723,11 @@ void CUmodelApp::CreateMenu()
 			.SetCallback(BIND_LAMBDA([this]() { FindObjectAndCreateVisualizer(-1); }))
 			+ NewMenuItem("Next\tPgDn")
 			.SetCallback(BIND_LAMBDA([this]() { FindObjectAndCreateVisualizer(1); }))
+			+ NewMenuSeparator()
+			+ NewMenuItem("History back\tAlt+Left")
+			.SetCallback(BIND_MEMBER(&CUmodelApp::GoBack, this))
+			+ NewMenuItem("History forward\tAlt+Right")
+			.SetCallback(BIND_MEMBER(&CUmodelApp::GoForward, this))
 		]
 		+ NewSubmenu("Object")
 		.Enable(false)
@@ -676,6 +759,7 @@ void CUmodelApp::CreateMenu()
 		[
 			NewMenuItem("Dump memory")
 			.SetCallback(BIND_STATIC(&DumpMemory))
+			+ NewMenuCheckbox("Show shader parameters", &GShowShaderParams)
 		]
 #endif
 		+ NewSubmenu("Help")
@@ -710,7 +794,7 @@ void CUmodelApp::UpdateObjectMenu()
 	guard(CUmodelApp::UpdateObjectMenu);
 	if (!MainMenu || !Viewer)
 	{
-		// window wasn't created yet, UpdateObjectMenu() will be called explicitly later
+		// Window wasn't created yet, UpdateObjectMenu() will be called explicitly later
 		return;
 	}
 	UIMenuItem* newObjMenu = Viewer->GetObjectMenu(NULL);

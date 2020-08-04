@@ -11,6 +11,11 @@
 
 #include "GameDefines.h"
 
+#ifdef __APPLE__
+#undef RENDERING //todo?
+#undef THREADING //todo?
+#endif
+
 // some private games
 #if PRIVATE_BUILD
 //-- none

@@ -467,7 +467,7 @@ void USkeleton::ConvertAnims(UAnimSequence4* Seq)
 			if (ScaleStripSize > 1)
 				ScaleKeys = Seq->CompressedScaleOffsets.OffsetData[localTrackIndex * ScaleStripSize + 1];
 		#else
-			ScaleKeys = Seq->CompressedScaleOffsets.GetOffsetData(localTrackIndex);
+			ScaleOffset = Seq->CompressedScaleOffsets.GetOffsetData(localTrackIndex);
 		#endif
 		}
 		// bone name
@@ -933,6 +933,22 @@ void UAnimSequence4::Serialize(FArchive& Ar)
 	{
 		// Part of data were serialized as properties
 		Ar << CompressedByteStream;
+#if SEAOFTHIEVES
+		if ((Ar.Game == GAME_SeaOfThieves) && (CompressedByteStream.Num() == 1) && (Ar.GetStopper() - Ar.Tell() > 0))
+		{
+			// Sea of Thieves has extra int32 == 1 before the CompressedByteStream
+			Ar.Seek(Ar.Tell() - 1);
+			Ar << CompressedByteStream;
+		}
+#endif // SEAOFTHIEVES
+
+		// Fix layout of "byte swapped" data (workaround for UE4 bug)
+		if (KeyEncodingFormat == AKF_PerTrackCompression && CompressedScaleOffsets.OffsetData.Num())
+		{
+			TArray<uint8> SwappedData;
+			TransferPerTrackData(SwappedData, CompressedByteStream);
+			Exchange(SwappedData, CompressedByteStream);
+		}
 	}
 	else
 	{

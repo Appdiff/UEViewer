@@ -1,25 +1,15 @@
-#include <SDL2/SDL_syswm.h>
-#undef DrawText
-
 #include "Core.h"
 
 #if RENDERING
 
-#include "TextContainer.h"
+#include <SDL2/SDL_syswm.h>
+#undef DrawText
+
 #include "GlWindow.h"
 #include "CoreGL.h"
 
-// font
-#include "GlFont.h"
-
-#define CHARS_PER_LINE			(TEX_WIDTH/CHAR_WIDTH)
-#define FONT_SPACING			1
-#define TEXT_SCROLL_LINES		((CHAR_HEIGHT-FONT_SPACING)/2)
-//#define SHOW_FONT_TEX			1		// show font texture
-
 
 #define LIGHTING_MODES			1		// allow switching scene lighting modes with Ctrl+L
-#define DUMP_TEXTS				1		// allow Ctrl+D to dump all onscreen texts to a log
 #define FUNNY_BACKGROUND		1		// draw gradient background
 #define SMART_RESIZE			1		// redraw window contents while resizing window
 #define USE_BLOOM				1
@@ -37,13 +27,6 @@
 // focus (SDL 1.2 has such call!)
 #define FIX_STICKY_MOD_KEYS		1
 
-#if _MSC_VER
-#pragma comment(lib, "opengl32.lib")
-#endif
-
-//#if SDL_VERSION_ATLEAST(1,3,0)
-//#define NEW_SDL					1
-//#endif
 
 #if MAX_DEBUG
 
@@ -79,15 +62,6 @@ static int lightingMode = LIGHTING_SPECULAR;
 
 #endif // LIGHTING_MODES
 
-int GCurrentFrame = 1;
-int GContextFrame = 0;
-
-
-inline void InvalidateContext()
-{
-	GContextFrame = GCurrentFrame + 1;
-	GCurrentFrame += 2;
-}
 
 //-----------------------------------------------------------------------------
 // Some constants
@@ -109,14 +83,24 @@ inline void InvalidateContext()
 // State variables
 //-----------------------------------------------------------------------------
 
+namespace Viewport
+{
+
+Point Size = { 800, 600 };
+
+Point MousePos = { 0, 0 };
+
+// Variables used to store mouse position before switching to relative mode, so
+// the position will be restored after releasing mouse buttons.
+int MouseButtons = 0;			// bit mask: left=1, middle=2, right=4, wheel up=8, wheel down=16
+int MouseButtonsDelta = 0;		// when some bit is set, it indicates that this button was pressed/released
+
+} // namespace Viewport
+
 static float frameTime;
 static unsigned lastFrameTime = 0;
 
 static bool  is2Dmode = false;
-
-// window size
-static int   winWidth  = 800;
-static int   winHeight = 600;
 
 // matrices
 static float projectionMatrix[4][4];
@@ -137,9 +121,6 @@ static float zFar  = 4096;			// far clipping plane
 static float yFov  = DEFAULT_FOV;
 static float tFovX, tFovY;			// tan(fov_x|y)
 
-// mouse state
-static int   mouseButtons;			// bit mask: left=1, middle=2, right=4, wheel up=8, wheel down=16
-
 
 //-----------------------------------------------------------------------------
 // Configuration
@@ -147,8 +128,6 @@ static int   mouseButtons;			// bit mask: left=1, middle=2, right=4, wheel up=8,
 
 static float distScale  = 1;
 bool   vpInvertXAxis = false;
-
-bool   GShowDebugInfo = true;
 
 
 //-----------------------------------------------------------------------------
@@ -159,7 +138,7 @@ static void Set2Dmode(bool force = false)
 {
 	// force changes in viewport
 	//!! bad looking code
-	int width = winWidth, height = winHeight;
+	int width = Viewport::Size.X, height = Viewport::Size.Y;
 	if (GCurrentFramebuffer)
 	{
 		width  = GCurrentFramebuffer->Width();
@@ -188,7 +167,7 @@ static void Set3Dmode()
 {
 	// force changes in viewport
 	//!! bad looking code
-	int width = winWidth, height = winHeight;
+	int width = Viewport::Size.X, height = Viewport::Size.Y;
 	if (GCurrentFramebuffer)
 	{
 		width  = GCurrentFramebuffer->Width();
@@ -235,119 +214,20 @@ void SetViewOffset(const CVec3 &offset)
 // Text output
 //-----------------------------------------------------------------------------
 
-static GLuint	FontTexNum = 0;
-
-static void LoadFont()
-{
-	// decompress font texture
-	byte *pic = (byte*)appMalloc(TEX_WIDTH * TEX_HEIGHT * 4);
-	const byte *p;
-	byte *dst;
-
-	// unpack 4 bit-per-pixel data with RLE encoding of null bytes
-	for (p = TEX_DATA, dst = pic; p < TEX_DATA + ARRAY_COUNT(TEX_DATA); /*empty*/)
-	{
-		byte s = *p++;
-		if (s & 0x80)
-		{
-			// unpack data
-			// using *17 here: 0*17=>0, 15*17=>255
-			for (int count = (s & 0x7F) + 1; count > 0; count--)
-			{
-				s = *p++;
-				dst[0] = dst[1] = dst[2] = 255; dst += 3;
-				*dst++ = (s >> 4) * 17;
-				dst[0] = dst[1] = dst[2] = 255; dst += 3;
-				*dst++ = (s & 0xF) * 17;
-			}
-		}
-		else
-		{
-			// zero bytes
-			for (int count = (s + 2) * 2; count > 0; count--)
-			{
-				dst[0] = dst[1] = dst[2] = 255; dst += 3;
-				*dst++ = 0;
-			}
-		}
-	}
-//	printf("p[%d], dst[%d] -> %g\n", p - TEX_DATA, dst - pic, float(dst - pic) / 4 / TEX_WIDTH);
-
-	// upload it
-	glGenTextures(1, &FontTexNum);
-	glBindTexture(GL_TEXTURE_2D, FontTexNum);
-	// the best whould be to use 8-bit format with A=(var) and RGB=FFFFFF, but GL_ALPHA has RGB=0;
-	// format with RGB=0 is not suitable for font shadow rendering because we must use GL_SRC_COLOR
-	// blending; that's why we're using GL_RGBA here
-	glTexImage2D(GL_TEXTURE_2D, 0, 4, TEX_WIDTH, TEX_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, pic);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	appFree(pic);
-}
-
-
-static void DrawChar(char c, unsigned color, int textX, int textY)
-{
-	if (textX <= -CHAR_WIDTH || textY <= -CHAR_HEIGHT ||
-		textX > winWidth || textY > winHeight)
-		return;				// outside of screen
-
-	glBegin(GL_QUADS);
-
-	c -= FONT_FIRST_CHAR;
-
-	// screen coordinates
-	int x1 = textX;
-	int y1 = textY;
-	int x2 = textX + CHAR_WIDTH - FONT_SPACING;
-	int y2 = textY + CHAR_HEIGHT - FONT_SPACING;
-
-	// texture coordinates
-	int line = c / CHARS_PER_LINE;
-	int col  = c - line * CHARS_PER_LINE;
-
-	float s0 = col * CHAR_WIDTH;
-	float s1 = s0 + CHAR_WIDTH - FONT_SPACING;
-	float t0 = line * CHAR_HEIGHT;
-	float t1 = t0 + CHAR_HEIGHT - FONT_SPACING;
-
-	s0 /= TEX_WIDTH;
-	s1 /= TEX_WIDTH;
-	t0 /= TEX_HEIGHT;
-	t1 /= TEX_HEIGHT;
-
-	unsigned color2 = color & 0xFF000000;	// RGB=0, keep alpha
-	for (int s = 1; s >= 0; s--)
-	{
-		// s=1 -> shadow, s=0 -> char
-		glColor4ubv((GLubyte*)&color2);
-		glTexCoord2f(s1, t0);
-		glVertex2f(x2+s, y1+s);
-		glTexCoord2f(s0, t0);
-		glVertex2f(x1+s, y1+s);
-		glTexCoord2f(s0, t1);
-		glVertex2f(x1+s, y2+s);
-		glTexCoord2f(s1, t1);
-		glVertex2f(x2+s, y2+s);
-		color2 = color;
-	}
-
-	glEnd();
-}
 
 //-----------------------------------------------------------------------------
 
-static SDL_Window		*sdlWindow;
-static SDL_GLContext	sdlContext;
+static SDL_Window* sdlWindow;
+static SDL_GLContext sdlContext;
 
 // called when window resized
 static void ResizeWindow(int w, int h)
 {
 	guard(ResizeWindow);
 
-	winWidth  = w;
-	winHeight = h;
-	SDL_SetWindowSize(sdlWindow, winWidth, winHeight);
+	Viewport::Size.X = w;
+	Viewport::Size.Y = h;
+	SDL_SetWindowSize(sdlWindow, Viewport::Size.X, Viewport::Size.Y);
 	SDL_CHECK_ERROR;
 
 	static bool loaded = false;
@@ -365,12 +245,7 @@ static void ResizeWindow(int w, int h)
 		GL_CheckGLSL();
 	}
 
-	if (!glIsTexture(FontTexNum))
-	{
-		// possibly context was recreated ...
-		InvalidateContext();
-		LoadFont();
-	}
+	PrepareFontTexture();
 
 	// init gl
 	glDisable(GL_BLEND);
@@ -386,10 +261,11 @@ static void ResizeWindow(int w, int h)
 	unguard;
 }
 
+//todo: remove this?
 void CApplication::GetWindowSize(int &x, int &y)
 {
-	x = winWidth;
-	y = winHeight;
+	x = Viewport::Size.X;
+	y = Viewport::Size.Y;
 }
 
 
@@ -399,8 +275,8 @@ void CApplication::ToggleFullscreen()
 
 	if (IsFullscreen)
 	{
-		SavedWinWidth = winWidth;
-		SavedWinHeight = winHeight;
+		SavedWinWidth = Viewport::Size.X;
+		SavedWinHeight = Viewport::Size.Y;
 		// get desktop display mode
 		SDL_DisplayMode desktopMode;
 		if (SDL_GetDesktopDisplayMode(SDL_GetWindowDisplayIndex(sdlWindow), &desktopMode) != 0)
@@ -425,62 +301,70 @@ void CApplication::ToggleFullscreen()
 // Mouse control
 //-----------------------------------------------------------------------------
 
-// Variables used to store mouse position before switching to relative mode, so
-// the position will be restored after releasing mouse buttons.
-static int mousePosX, mousePosY;
-
 static void OnMouseButton(int type, int button)
 {
-	int prevButtons = mouseButtons;
-	// update mouse buttons state
+	int prevButtons = Viewport::MouseButtons;
+
+	// Update mouse buttons state, catch button state changes
 	int mask = SDL_BUTTON(button);
 	if (type == SDL_MOUSEBUTTONDOWN)
-		mouseButtons |= mask;
+		Viewport::MouseButtons |= mask;
 	else
-		mouseButtons &= ~mask;
-	if (!prevButtons && mouseButtons)
+		Viewport::MouseButtons &= ~mask;
+
+	// Store info about changed button state
+	Viewport::MouseButtonsDelta = Viewport::MouseButtons ^ prevButtons;
+
+	// Capture/release the mouse
+	if (!prevButtons && Viewport::MouseButtons)
 	{
-		// grabbing mouse
-		SDL_GetMouseState(&mousePosX, &mousePosY);
+		// Grabbing mouse
+		SDL_GetMouseState(&Viewport::MousePos.X, &Viewport::MousePos.Y);
 		SDL_SetRelativeMouseMode(SDL_TRUE);		// switch to relative mode - mouse cursor will be hidden and remains in single place
 	}
-	else if (prevButtons && !mouseButtons)
+	else if (prevButtons && !Viewport::MouseButtons)
 	{
-		// releasing mouse
+		// Releasing mouse
 		SDL_SetRelativeMouseMode(SDL_FALSE);
-		SDL_WarpMouseInWindow(sdlWindow, mousePosX, mousePosY);
+		SDL_WarpMouseInWindow(sdlWindow, Viewport::MousePos.X, Viewport::MousePos.Y);
 	}
 }
 
 
 static void OnMouseMove(int mx, int my)
 {
-	if (!mouseButtons) return;
+	if (!Viewport::MouseButtons)
+	{
+		// Just update mouse position
+		SDL_GetMouseState(&Viewport::MousePos.X, &Viewport::MousePos.Y);
+		return;
+	}
 
-	float xDelta = (float)mx / winWidth;
-	float yDelta = (float)my / winHeight;
+	float xDelta = (float)mx / Viewport::Size.X;
+	float yDelta = (float)my / Viewport::Size.Y;
 	if (vpInvertXAxis)
 		xDelta = -xDelta;
 
 	float YawDelta = 0, PitchDelta = 0, DistDelta = 0, PanX = 0, PanY = 0;
 
-	if (mouseButtons & SDL_BUTTON(SDL_BUTTON_LEFT))
+	if (Viewport::MouseButtons & SDL_BUTTON(SDL_BUTTON_LEFT))
 	{
 		// rotate camera
 		YawDelta   = -xDelta * 360;
 		PitchDelta =  yDelta * 360;
 	}
-	if (mouseButtons & SDL_BUTTON(SDL_BUTTON_RIGHT))
+	if (Viewport::MouseButtons & SDL_BUTTON(SDL_BUTTON_RIGHT))
 	{
 		// change distance to object
 		DistDelta = yDelta * 400 * distScale;
 	}
-	if (mouseButtons & SDL_BUTTON(SDL_BUTTON_MIDDLE))
+	if (Viewport::MouseButtons & SDL_BUTTON(SDL_BUTTON_MIDDLE))
 	{
 		// pan camera
 		PanX = xDelta * viewDist * 2;
 		PanY = yDelta * viewDist * 2;
 	}
+
 	MoveCamera(YawDelta, PitchDelta, DistDelta, PanX, PanY);
 }
 
@@ -589,7 +473,7 @@ static void BuildMatrices()
 
 	// compute projection matrix
 	tFovY = tan(yFov * M_PI / 360.0f);
-	tFovX = tFovY / winHeight * winWidth; // tan(xFov * M_PI / 360.0f);
+	tFovX = tFovY / Viewport::Size.Y * Viewport::Size.X; // tan(xFov * M_PI / 360.0f);
 	float zMin = zNear * distScale;
 	float zMax = zFar  * distScale;
 	float xMin = -zMin * tFovX;
@@ -642,7 +526,7 @@ static void Init(const char *caption)
 //	SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
 
 	sdlWindow = SDL_CreateWindow(caption,
-		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, winWidth, winHeight,
+		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, Viewport::Size.X, Viewport::Size.Y,
 		SDL_WINDOW_OPENGL|SDL_WINDOW_SHOWN|SDL_WINDOW_RESIZABLE);
 	if (!sdlWindow)
 	{
@@ -657,7 +541,7 @@ static void Init(const char *caption)
 	#endif
 
 	// initialize GL
-	ResizeWindow(winWidth, winHeight);
+	ResizeWindow(Viewport::Size.X, Viewport::Size.Y);
 
 //	appPrintf("OpenGL %s / GLSL %s / %s\n",
 //		glGetString(GL_VERSION),
@@ -677,276 +561,8 @@ static void Shutdown()
 
 
 //-----------------------------------------------------------------------------
-// Text output
+// Drawing text at 3D position
 //-----------------------------------------------------------------------------
-
-#define TOP_TEXT_POS	CHAR_HEIGHT
-#define BOTTOM_TEXT_POS	CHAR_HEIGHT
-#define LEFT_BORDER		CHAR_WIDTH
-#define RIGHT_BORDER	CHAR_WIDTH
-
-
-struct CRText : public CTextRec
-{
-	short			x, y;
-	ETextAnchor		anchor;
-	unsigned		color;
-};
-
-static TTextContainer<CRText, 65536> Text;
-
-static int nextText_y[TA_Last];
-static int textOffset = 0;
-
-#define I 255
-#define o 51
-static const unsigned colorTable[8] =
-{
-	RGB255(0, 0, 0),
-	RGB255(I, o, o),
-	RGB255(o, I, o),
-	RGB255(I, I, o),
-	RGB255(o, o, I),
-	RGB255(I, o, I),
-	RGB255(o, I, I),
-	RGB255(I, I, I)
-};
-
-#define WHITE_COLOR		RGB(255,255,255)
-
-#undef I
-#undef o
-
-
-static void ClearTexts()
-{
-	nextText_y[TA_TopLeft] = nextText_y[TA_TopRight] = TOP_TEXT_POS + textOffset;
-	nextText_y[TA_BottomLeft] = nextText_y[TA_BottomRight] = 0;
-	Text.Clear();
-}
-
-
-static void GetTextExtents(const char *s, int &width, int &height)
-{
-	int x = 0, w = 0;
-	int h = CHAR_HEIGHT - FONT_SPACING;
-	while (char c = *s++)
-	{
-		if (c == COLOR_ESCAPE)
-		{
-			if (*s)
-				s++;
-			continue;
-		}
-		if (c == '\n')
-		{
-			if (x > w) w = x;
-			x = 0;
-			h += CHAR_HEIGHT - FONT_SPACING;
-			continue;
-		}
-		x += CHAR_WIDTH - FONT_SPACING;
-	}
-	width = max(x, w);
-	height = h;
-}
-
-
-static void DrawText(const CRText *rec)
-{
-	int y = rec->y;
-	const char *text = rec->text;
-
-	if (rec->anchor == TA_BottomLeft || rec->anchor == TA_BottomRight)
-	{
-		y = y + winHeight - nextText_y[rec->anchor] - BOTTOM_TEXT_POS;
-	}
-
-	unsigned color = rec->color;
-
-	while (true)
-	{
-		const char *s = strchr(text, '\n');
-		int len = s ? s - text : strlen(text);
-
-		int x = rec->x;
-		for (int i = 0; i < len; i++)
-		{
-			char c = text[i];
-			if (c == COLOR_ESCAPE)
-			{
-				char c2 = text[i+1];
-				if (c2 >= '0' && c2 <= '7')
-				{
-					color = colorTable[c2 - '0'];
-					i++;
-					continue;
-				}
-			}
-			DrawChar(c, color, x, y);
-			x += CHAR_WIDTH - FONT_SPACING;
-		}
-		if (!s) return;							// all done
-
-		y += CHAR_HEIGHT - FONT_SPACING;
-		text = s + 1;
-	}
-}
-
-#if DUMP_TEXTS
-static bool dumpTexts = false;
-#endif
-
-void FlushTexts()
-{
-	if (GUseGLSL) glUseProgram(0);				//?? default shader will not allow alpha on text
-	// setup GL
-	glEnable(GL_TEXTURE_2D);
-	glDisable(GL_TEXTURE_CUBE_MAP_ARB);
-	glBindTexture(GL_TEXTURE_2D, FontTexNum);
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-#if 0
-	glEnable(GL_ALPHA_TEST);
-	glAlphaFunc(GL_GREATER, 0.5);
-#else
-	glDisable(GL_ALPHA_TEST);
-#endif
-#if SHOW_FONT_TEX
-	glColor3f(1, 1, 1);
-	glBegin(GL_QUADS);
-	glTexCoord2f(1, 0);
-	glVertex2f(winWidth, 0);
-	glTexCoord2f(0, 0);
-	glVertex2f(winWidth-TEX_WIDTH, 0);
-	glTexCoord2f(0, 1);
-	glVertex2f(winWidth-TEX_WIDTH, TEX_HEIGHT);
-	glTexCoord2f(1, 1);
-	glVertex2f(winWidth, TEX_HEIGHT);
-	glEnd();
-#endif // SHOW_FONT_TEX
-
-#if DUMP_TEXTS
-	appSetNotifyHeader("Screen texts");
-#endif
-	Text.Enumerate(DrawText);
-	ClearTexts();
-#if DUMP_TEXTS
-	appSetNotifyHeader(NULL);
-	dumpTexts = false;
-#endif
-}
-
-
-static void DrawTextPos(int x, int y, const char *text, unsigned color, ETextAnchor anchor = TA_None)
-{
-	if (!GShowDebugInfo) return;
-
-	CRText *rec = Text.Add(text);
-	if (!rec) return;
-	rec->x      = x;
-	rec->y      = y;
-	rec->anchor = anchor;
-	rec->color  = color;
-}
-
-
-static void DrawTextAtAnchor(ETextAnchor anchor, unsigned color, const char *fmt, va_list argptr)
-{
-	guard(DrawTextAtAnchor);
-
-	assert(anchor >= 0 && anchor < TA_Last);
-
-	bool isBottom = (anchor >= TA_BottomLeft);
-	bool isLeft   = (anchor == TA_TopLeft || anchor == TA_BottomLeft);
-
-	int pos_y = nextText_y[anchor];
-
-#if DUMP_TEXTS
-	if (dumpTexts) pos_y = winHeight / 2;				// trick ...
-#endif
-
-	if (!isBottom && pos_y >= winHeight && !dumpTexts)	// out of screen
-		return;
-
-	char msg[4096];
-	vsnprintf(ARRAY_ARG(msg), fmt, argptr);
-	int w, h;
-	GetTextExtents(msg, w, h);
-
-	nextText_y[anchor] = pos_y + h;
-
-	if (!isBottom && pos_y + h <= 0 && !dumpTexts)		// out of screen
-		return;
-
-	DrawTextPos(isLeft ? LEFT_BORDER : winWidth - RIGHT_BORDER - w, pos_y, msg, color, anchor);
-
-#if DUMP_TEXTS
-	if (dumpTexts)
-	{
-		// drop color escape characters
-		char *d = msg;
-		char *s = msg;
-		while (char c = *s++)
-		{
-			if (c == COLOR_ESCAPE && *s)
-			{
-				s++;
-				continue;
-			}
-			*d++ = c;
-		}
-		*d = 0;
-		appNotify("%s", msg);
-	}
-#endif
-
-	unguard;
-}
-
-
-#define DRAW_TEXT(anchor,color,fmt)	\
-	va_list	argptr;				\
-	va_start(argptr, fmt);		\
-	DrawTextAtAnchor(anchor, color, fmt, argptr); \
-	va_end(argptr);
-
-
-void DrawTextLeft(const char *text, ...)
-{
-	DRAW_TEXT(TA_TopLeft, WHITE_COLOR, text);
-}
-
-
-void DrawTextRight(const char *text, ...)
-{
-	DRAW_TEXT(TA_TopRight, WHITE_COLOR, text);
-}
-
-
-void DrawTextBottomLeft(const char *text, ...)
-{
-	DRAW_TEXT(TA_BottomLeft, WHITE_COLOR, text);
-}
-
-
-void DrawTextBottomRight(const char *text, ...)
-{
-	DRAW_TEXT(TA_BottomRight, WHITE_COLOR, text);
-}
-
-
-void DrawText(ETextAnchor anchor, const char *text, ...)
-{
-	DRAW_TEXT(anchor, WHITE_COLOR, text);
-}
-
-
-void DrawText(ETextAnchor anchor, unsigned color, const char *text, ...)
-{
-	DRAW_TEXT(anchor, color, text);
-}
-
 
 // Project 3D point to screen coordinates; return false when not in view frustum
 static bool ProjectToScreen(const CVec3 &pos, int scr[2])
@@ -963,8 +579,8 @@ static bool ProjectToScreen(const CVec3 &pos, int scr[2])
 	float y = dot(vec, viewAxis[2]) / z / tFovY;
 	if (y < -1 || y > 1) return false;
 
-	scr[0] = appRound(/*winX + */ winWidth  * (0.5 - x / 2));
-	scr[1] = appRound(/*winY + */ winHeight * (0.5 - y / 2));
+	scr[0] = appRound(/*winX + */ Viewport::Size.X * (0.5 - x / 2));
+	scr[1] = appRound(/*winY + */ Viewport::Size.Y * (0.5 - y / 2));
 
 	return true;
 }
@@ -996,7 +612,7 @@ void DrawText3D(const CVec3 &pos, unsigned color, const char *text, ...)
 static void PostEffectPrepare(CFramebuffer &FBO)
 {
 	guard(PostEffectPrepare);
-	FBO.SetSize(winWidth, winHeight);
+	FBO.SetSize(Viewport::Size.X, Viewport::Size.Y);
 	FBO.Use();
 	unguard;
 }
@@ -1080,11 +696,11 @@ static void DrawBackground()
 	Set2Dmode();
 	glBegin(GL_QUADS);
 	glColor4f(CLEAR_COLOR);
-	glVertex2f(winWidth, 0);
+	glVertex2f(Viewport::Size.X, 0);
 	glVertex2f(0, 0);
 	glColor4f(CLEAR_COLOR2);
-	glVertex2f(0, winHeight);
-	glVertex2f(winWidth, winHeight);
+	glVertex2f(0, Viewport::Size.Y);
+	glVertex2f(Viewport::Size.X, Viewport::Size.Y);
 	glEnd();
 	glClear(GL_DEPTH_BUFFER_BIT);
 #else
@@ -1198,6 +814,8 @@ void CApplication::DrawTexts()
 		DrawTextLeft(S_RED "Keyboard:\n~~~~~~~~~");
 		DrawKeyHelp("Esc",         "exit");
 		DrawKeyHelp("H",           "toggle help");
+		DrawKeyHelp("Ctrl+PgUp/PgDn", "scroll this text");
+		DrawKeyHelp("Ctrl+MouseWheel", "scroll this text");
 		DrawKeyHelp("Alt+Enter",   "toggle fullscreen");
 		DrawKeyHelp("LeftMouse",   "rotate view");
 		DrawKeyHelp("RightMouse",  "zoom view");
@@ -1242,12 +860,11 @@ void CApplication::ProcessKey(unsigned key, bool isDown)
 		break;
 	case SPEC_KEY(PAGEUP)|KEY_CTRL:
 	case SDLK_KP_9|KEY_CTRL:
-		textOffset += TEXT_SCROLL_LINES;
-		if (textOffset > 0) textOffset = 0;
+		ScrollText(1);
 		break;
 	case SPEC_KEY(PAGEDOWN)|KEY_CTRL:
 	case SDLK_KP_3|KEY_CTRL:
-		textOffset -= TEXT_SCROLL_LINES;
+		ScrollText(-1);
 		break;
 #if LIGHTING_MODES
 	case 'l'|KEY_CTRL:
@@ -1270,7 +887,7 @@ void CApplication::ProcessKey(unsigned key, bool isDown)
 		break;
 #if DUMP_TEXTS
 	case 'd'|KEY_CTRL:
-		dumpTexts = true;
+		GDumpTexts = true;
 		break;
 #endif
 	case SPEC_KEY(UP)|KEY_SHIFT:
@@ -1385,7 +1002,7 @@ void CApplication::VisualizerLoop(const char *caption)
 				HandleKeyDown(TranslateKey(evt.key.keysym.sym, evt.key.keysym.scancode), evt.key.keysym.mod);
 				break;
 			case SDL_KEYUP:
-				ProcessKey(evt.key.keysym.sym, false);
+				ProcessKey((unsigned)evt.key.keysym.sym, false);
 				break;
 			case SDL_WINDOWEVENT:
 				switch (evt.window.event)
@@ -1414,6 +1031,22 @@ void CApplication::VisualizerLoop(const char *caption)
 				break;
 			case SDL_MOUSEMOTION:
 				OnMouseMove(evt.motion.xrel, evt.motion.yrel);
+				break;
+			case SDL_MOUSEWHEEL:
+				{
+					// Ctrl+Wheel - scroll text
+					if (SDL_GetModState() & (KMOD_LCTRL | KMOD_RCTRL))
+					{
+						if (evt.wheel.y > 0)
+						{
+							ScrollText(6);
+						}
+						else if (evt.wheel.y < 0)
+						{
+							ScrollText(-6);
+						}
+					}
+				}
 				break;
 			case SDL_QUIT:
 				RequestingQuit = true;
@@ -1448,6 +1081,8 @@ void CApplication::VisualizerLoop(const char *caption)
 		{
 			SDL_Delay(100);
 		}
+
+		Viewport::MouseButtonsDelta = 0;		// reset "clicked" state
 	}
 	// shutdown
 	Shutdown();
@@ -1462,7 +1097,7 @@ SDL_Window* CApplication::GetWindow() const
 
 void CApplication::ResizeWindow()
 {
-	::ResizeWindow(winWidth, winHeight);
+	::ResizeWindow(Viewport::Size.X, Viewport::Size.Y);
 }
 
 void CApplication::Exit()

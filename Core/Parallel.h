@@ -71,7 +71,7 @@ protected:
 #ifdef _WIN32
 	void* data;
 #else
-	enum { SemSize = 16 };
+	enum { SemSize = sizeof(size_t) * 4 };
 	size_t data[SemSize / sizeof(size_t)];
 #endif
 #if TRACY_DEBUG_MUTEX
@@ -101,7 +101,7 @@ protected:
 #ifdef _WIN32
 	uintptr_t thread;
 #else
-	enum { ThreadSize = 8 }; // actually: typedef unsigned long int pthread_t
+	enum { ThreadSize = sizeof(size_t) }; // actually: typedef unsigned long int pthread_t
 	size_t thread[ThreadSize / sizeof(size_t)];
 #endif
 };
@@ -114,6 +114,7 @@ protected:
 
 #undef InterlockedIncrement
 #undef InterlockedDecrement
+#undef InterlockedAdd
 
 // InterlockedIncrement/Decrement functions returns new value
 
@@ -177,14 +178,14 @@ FORCEINLINE int32 InterlockedAdd(volatile uint32* Value, int32 Amount)
 
 #ifdef _WIN64
 
-FORCEINLINE int32 InterlockedAdd(volatile int64* Value, int64 Amount)
+FORCEINLINE int64 InterlockedAdd(volatile int64* Value, int64 Amount)
 {
-	return (int32)::_InterlockedExchangeAdd64((__int64*)Value, (__int64)Amount);
+	return (int64)::_InterlockedExchangeAdd64((__int64*)Value, (__int64)Amount);
 }
 
-FORCEINLINE int32 InterlockedAdd(volatile uint64* Value, int64 Amount)
+FORCEINLINE uint64 InterlockedAdd(volatile uint64* Value, int64 Amount)
 {
-	return (int32)::_InterlockedExchangeAdd64((__int64*)Value, (__int64)Amount);
+	return (uint64)::_InterlockedExchangeAdd64((__int64*)Value, (__int64)Amount);
 }
 
 #endif // _WIN64
@@ -247,12 +248,12 @@ FORCEINLINE int32 InterlockedAdd(volatile uint32* Value, int32 Amount)
 	return __sync_fetch_and_add(Value, Amount);
 }
 
-FORCEINLINE int32 InterlockedAdd(volatile int64* Value, int64 Amount)
+FORCEINLINE int64 InterlockedAdd(volatile int64* Value, int64 Amount)
 {
 	return __sync_fetch_and_add(Value, Amount);
 }
 
-FORCEINLINE int32 InterlockedAdd(volatile uint64* Value, int64 Amount)
+FORCEINLINE uint64 InterlockedAdd(volatile uint64* Value, int64 Amount)
 {
 	return __sync_fetch_and_add(Value, Amount);
 }
@@ -276,28 +277,36 @@ typedef void (*ThreadTask)(void*);
 // Execute ThreadTask in thread. Return false if there's no free threads
 bool ExecuteInThread(ThreadTask task, void* taskData, CSemaphore* fence = NULL, bool allowQueue = false);
 
+#define TryExecuteInThread(...) TryExecuteInThreadImpl(__FUNCTION__, __VA_ARGS__)
+
 template<typename F>
-FORCEINLINE void TryExecuteInThread(F&& task, CSemaphore* fence = NULL, bool allowQueue = false)
+FORCEINLINE void TryExecuteInThreadImpl(const char* errorContext, F&& task, CSemaphore* fence = NULL, bool allowQueue = false)
 {
 	guard(TryExecuteInThread);
 
 	struct Worker
 	{
-		Worker(F&& inTask)
+		Worker(F&& inTask, const char* inContext)
 		: task(MoveTemp(inTask))
+		, context(inContext)
 		{}
 
 		F task;
+		const char* context;
 
 		static void Proc(void* data)
 		{
 			Worker* worker = (Worker*)data;
+
+			guard(TryExecuteInThread);
 			worker->task();
+			unguardf("%s", worker->context);
+
 			delete worker;
 		}
 	};
 
-	Worker* worker = new Worker(MoveTemp(task));
+	Worker* worker = new Worker(MoveTemp(task), errorContext);
 	if (!ExecuteInThread(Worker::Proc, worker, fence, allowQueue))
 	{
 		// Execute in current thread
@@ -310,7 +319,7 @@ FORCEINLINE void TryExecuteInThread(F&& task, CSemaphore* fence = NULL, bool all
 }
 
 template<typename F>
-FORCEINLINE void TryExecuteInThread(F& task, CSemaphore* fence = NULL, bool allowQueue = false)
+FORCEINLINE void TryExecuteInThreadImpl(F& task, CSemaphore* fence = NULL, bool allowQueue = false)
 {
 	static_assert(sizeof(task) == 0, "TryExecuteInThread can't accept lvalue");
 }
@@ -336,6 +345,7 @@ public:
 	CMutex mutex;
 	CSemaphore endSignal;
 	int8 numActiveThreads;
+	bool bAllSentToThreads;
 	int currentIndex;
 	int lastIndex;
 	int step;
@@ -445,7 +455,7 @@ FORCEINLINE T InterlockedAdd(T* Value, T2 Amount)
 }
 
 template<typename F>
-FORCEINLINE void ParallelFor(int Count, F& Func)
+FORCEINLINE void ParallelFor(int Count, F&& Func)
 {
 	for (int i = 0; i < Count; i++)
 		Func(i);
