@@ -54,5 +54,4 @@
 #	endif
 #endif // _WIN32
 
-
 #endif // __WIN32_TYPES_H__

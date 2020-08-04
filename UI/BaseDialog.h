@@ -279,7 +279,7 @@ private:
 // - It will automatically add 'ThisClass' pointer as a first parameter of callback function
 // - SetCallback function name depends on VarName
 #define DECLARE_CALLBACK(VarName, ...)				\
-  public:												\
+public:												\
 	typedef ::Callback<void(ThisClass*, __VA_ARGS__)> VarName##_t; \
 	template<typename CB>							\
 	FORCEINLINE ThisClass& Set##VarName(CB&& cb)	\
