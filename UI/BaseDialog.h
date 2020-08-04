@@ -290,6 +290,7 @@ protected:											\
 	VarName##_t		VarName;						\
 private:
 
+
 // Control creation helper.
 // Use this to receive 'Type&' value instead of 'Type*' available with 'new Type' call
 #define NewControl(type, ...)	(* new type(__VA_ARGS__))
