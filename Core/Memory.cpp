@@ -19,7 +19,7 @@ int    GTotalAllocationCount = 0;
 #define UNINIT_BLOCK			0xCC
 #define FREE_BLOCK				0xFE
 
-#define MAX_ALLOCATION_SIZE		(513<<20)		// upper limit for single allocation is 513+1 Mb
+#define MAX_ALLOCATION_SIZE		(1020<<20)		// upper limit for single allocation is 1000+1 Mb
 
 #if DEBUG_MEMORY
 
