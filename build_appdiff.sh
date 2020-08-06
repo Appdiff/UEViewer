@@ -31,8 +31,12 @@ while [ "$1" ]; do
 			single_file=${2//\\//}
 			shift 2
 			;;
+		--project)
+			project=$2
+			shift 2
+			;;
 		*)
-			echo "Usage: build.sh [--debug] [--profile] [--vc <version>] [--64] [--file <cpp file>]"
+			echo "Usage: build.sh [--debug] [--profile] [--vc <version>] [--64] [--file <cpp file>] [--project <name>]"
 			exit
 			;;
 	esac
