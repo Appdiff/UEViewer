@@ -4,15 +4,13 @@
 class UnPackage;
 class IProgressCallback;
 
-void DisplayPackageStats(const TArray<UnPackage*> &Packages);
-
 // Export all loaded objects.
 bool ExportObjects(const TArray<UObject*> *Objects, IProgressCallback* progress = NULL);
 
 // Export everything from provided package list.
 bool ExportPackages(const TArray<UnPackage*>& Packages, IProgressCallback* Progress = NULL);
 
-void ListPackages(const TArray<UnPackage*> &Packages);
+void DisplayPackageStats(const TArray<UnPackage*> &Packages);
 
 void SavePackages(const TArray<const CGameFileInfo*>& Packages, IProgressCallback* Progress = NULL);
 

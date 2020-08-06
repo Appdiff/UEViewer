@@ -1,0 +1,34 @@
+# perl highlighting
+
+R   = .
+PRJ = umodel.appdiff
+!include common.project
+
+APPDIFF=appdiff
+
+INCLUDES += $APPDIFF UmodelTool
+
+!if "$PLATFORM" eq "win32" || "$PLATFORM" eq "win64"
+	IS_WINDOWS = 1
+!else
+	IS_WINDOWS = 0
+!endif
+
+sources(MAIN) = {
+	Exporters/*.cpp
+	Unreal/*.cpp
+	Unreal/FileSystem/*.cpp
+	Unreal/GameSpecific/*.cpp
+	Unreal/Mesh/*.cpp
+	Unreal/UnrealMaterial/*.cpp
+	Unreal/UnrealMesh/*.cpp
+	Unreal/Wrappers/*.cpp
+	MeshInstance/*.cpp
+	Core/*.cpp
+  UmodelTool/MiscStrings.cpp
+  UmodelTool/UmodelCommands.cpp
+  UmodelTool/UmodelSettings.cpp
+	$APPDIFF/*.cpp
+}
+
+target(executable, $PRJ, MAIN + COMP_LIBS + UE4_LIBS + IMG_LIBS + NV_LIBS + MOBILE_LIBS, MAIN)

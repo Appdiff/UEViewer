@@ -90,9 +90,6 @@ static void SetPathOption(FString& where, const char* value, bool bUseCwd = fals
 void CStartupSettings::SetPath(const char* path)
 {
 	SetPathOption(GamePath, path, true);
-  if (GamePath.EndsWith("/")) {
-    GamePath.RemoveFromEnd("/");
-  }
 }
 
 void CStartupSettings::Reset()
