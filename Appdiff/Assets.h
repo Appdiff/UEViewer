@@ -1,3 +1,7 @@
+#ifndef __APPDIFF_ASSETS_H__
+#define __APPDIFF_ASSETS_H__
+
+
 class CAnimSet;
 class CSkeletalMesh;
 class CStaticMesh;
@@ -16,3 +20,6 @@ void CallExportAnimation(const CAnimSet* Anim);
 void RegisterExporters();
 
 void InitClassAndExportSystems(int Game);
+
+
+#endif // __APPDIFF_ASSETS_H__

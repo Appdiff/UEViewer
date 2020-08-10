@@ -209,7 +209,7 @@ int UE4UnversionedPackage(int verMin, int verMax)
 
 bool UE4EncryptedPak()
 {
-	return false;
+	return true;
 }
 
 #endif // UNREAL4
@@ -420,7 +420,8 @@ int main(int argc, const char **argv)
   }
   bool bShouldLoadPackages = true;
   TArray<UnPackage*> Packages;
-  appLoadPackages(Packages, FilePaths, bShouldLoadPackages);
+  appLoadPackages(Packages, FilePaths, AesKeys, bShouldLoadPackages);
+  return 0;
   TArray<const CGameFileInfo*> GameFiles;
   appGetGameFileInfo(GameFiles);
 

@@ -487,7 +487,11 @@ CGameFileInfo* CGameFileInfo::Register(FVirtualFileSystem* parentVfs, const CReg
 
 	// Verify file extension
 	const char *ext = strrchr(RegisterInfo.Filename, '.');
-	if (!ext) return NULL; // unknown type
+	if (!ext)
+  {
+    appPrintf("***********SKIPPING UNKNOWN EXTENSION.\n");
+    return NULL; // unknown type
+  }
 	ext++;
 
 	// to know if file is a package or not. Note: this will also make pak loading a but faster.

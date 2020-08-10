@@ -1,8 +1,20 @@
-#include "Core.h"
-#include "UnCore.h"
+#include "Core/Core.h"
+#include "Unreal/UnCore.h"
+#include "Unreal/UnObject.h"
+#include "Unreal/UnPackage.h"
+#include "Unreal/PackageUtils.h"
+#include "Appdiff/Index.h"
 
-#include "UnObject.h"
-#include "UnPackage.h"
+// includes for file enumeration
+#if _WIN32
+#	include <io.h>					// for findfirst() set
+#else
+#	include <dirent.h>				// for opendir() etc
+#	include <sys/stat.h>			// for stat()
+#endif
+
+
+void LoadGears4Manifest(const CGameFileInfo* info);
 
 
 void ListPackages(const TArray<UnPackage*> &Packages) {
@@ -42,13 +54,17 @@ void appGetGameFileInfo(TArray<const CGameFileInfo*> &Info_out)
 
 void appLoadPackages(TArray<UnPackage*> &Packages_out,
                      TArray<FStaticString<256>> &FilePaths,
+                     const TArray<FString> &AesKeys,
                      bool bShouldLoadPackages)
 {
-  for (int i=0; i<FilePaths.Num(); ++i)
-  {
-    RegisterGameFile(*FilePaths[i]);
-  }
+  LoadIndex(FilePaths, AesKeys);
+  //for (int i=0; i<FilePaths.Num(); ++i)
+  //{
+  //  LoadIndex(*FilePaths[i]);
+  //}
+  return;
 
+  /*
 #if GEARS4
 	if (GForceGame == GAME_Gears4)
 	{
@@ -93,7 +109,7 @@ void appLoadPackages(TArray<UnPackage*> &Packages_out,
 					info->ExtraSizeInKb += other->SizeInKb;
 				}
 			}
-		});*/
+		});* /
 #endif // UNREAL4
 
   for (int i=0; i<GameFiles.Num(); ++i)
@@ -108,6 +124,7 @@ void appLoadPackages(TArray<UnPackage*> &Packages_out,
       if (Package) Packages_out.Add(Package);
 		}
   }
+  */
 
   return;
 }

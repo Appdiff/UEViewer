@@ -528,7 +528,7 @@ bool FPakVFS::AttachReader(FArchive* reader, FString& error)
 	unguardf("PakVer=%d.%d", mainVer, subVer);
 }
 
-static bool ValidateString(FArchive& Ar)
+/*static*/ bool ValidateString(FArchive& Ar)
 {
 	// We're operating with index data, which is definitely less than 2Gb of size, so use Tell instead of Tell64.
 	int SavePos = Ar.Tell();
@@ -711,6 +711,7 @@ bool FPakVFS::LoadPakIndex(FArchive* reader, const FPakInfo& info, FString& erro
 {
 	guard(FPakVFS::LoadPakIndex);
 
+  appPrintf("444\n");
 	// Read full index into InfoBlock and setup InfoReader
 	TArray<byte> InfoBlock;
 	InfoBlock.SetNumUninitialized(info.IndexSize);

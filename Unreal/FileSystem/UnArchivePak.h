@@ -202,9 +202,9 @@ protected:
 	void ValidateMountPoint(FString& MountPoint);
 
 	// UE4.24 and older
-	bool LoadPakIndexLegacy(FArchive* reader, const FPakInfo& info, FString& error);
+	virtual bool LoadPakIndexLegacy(FArchive* reader, const FPakInfo& info, FString& error);
 	// UE4.25 and newer
-	bool LoadPakIndex(FArchive* reader, const FPakInfo& info, FString& error);
+	virtual bool LoadPakIndex(FArchive* reader, const FPakInfo& info, FString& error);
 
 #if 0
 	enum { HASH_SIZE = 1024 };
