@@ -147,6 +147,11 @@ static bool FindExtension(const char *Ext, const char **ExtensionsList, int NumE
 	return false;
 }
 
+bool FindUE4Extension(const char *Ext)
+{
+  return FindExtension(Ext, ARRAY_ARG(UE4PackageExtensions));
+}
+
 
 static TArray<CGameFileInfo*> GameFiles;
 int GNumPackageFiles = 0;
@@ -487,11 +492,7 @@ CGameFileInfo* CGameFileInfo::Register(FVirtualFileSystem* parentVfs, const CReg
 
 	// Verify file extension
 	const char *ext = strrchr(RegisterInfo.Filename, '.');
-	if (!ext)
-  {
-    appPrintf("***********SKIPPING UNKNOWN EXTENSION.\n");
-    return NULL; // unknown type
-  }
+	if (!ext) return NULL; // unknown type
 	ext++;
 
 	// to know if file is a package or not. Note: this will also make pak loading a but faster.

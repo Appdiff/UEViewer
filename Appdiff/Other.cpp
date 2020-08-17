@@ -57,7 +57,7 @@ void appLoadPackages(TArray<UnPackage*> &Packages_out,
                      const TArray<FString> &AesKeys,
                      bool bShouldLoadPackages)
 {
-  LoadIndex(FilePaths, AesKeys);
+  //LoadIndex(FilePaths, AesKeys);
   //for (int i=0; i<FilePaths.Num(); ++i)
   //{
   //  LoadIndex(*FilePaths[i]);

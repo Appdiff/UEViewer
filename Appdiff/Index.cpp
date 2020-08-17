@@ -1,105 +1,144 @@
+#include <map>
+
+#include "Core/Core.h"
+#include "Unreal/UnCore.h"
+#include "Unreal/FileSystem/GameFileSystem.h"
+#include "Unreal/FileSystem/UnArchivePak.h"
+#include "Unreal/FileSystem/UnArchiveObb.h"
+#include "Unreal/Unpackage.h"
+
 #include "Appdiff/Index.h"
 
 
-static FVirtualFileSystem* LoadFile(const char* FilePath, const TArray<FString> &AesKeys);
+class FPakVFS_appdiff;
+class UnPackage_appdiff;
 bool ValidateString(FArchive& Ar);
 
+bool FindUE4Extension(const char *Ext);
 
-void LoadIndex(const TArray<FStaticString<256>> &FilePaths, const TArray<FString> &AesKeys)
+
+class CMapInfo
 {
-  TArray<FVirtualFileSystem*> vfs;
-  for (int i=0; i<FilePaths.Num(); ++i)
+public:
+  CMapInfo(void) : d_vfs(NULL), d_index(-1), d_pkg(NULL), d_used(0) { return; }
+  CMapInfo(FPakVFS_appdiff* vfs, int index)
+  : d_vfs(vfs), d_index(index), d_pkg(NULL), d_used(0)
+  { return; }
+  CMapInfo(const CMapInfo& MapInfo)
+  : d_vfs(MapInfo.d_vfs), d_index(MapInfo.d_index), d_pkg(MapInfo.d_pkg), d_used(MapInfo.d_used)
+  { return; }
+  FPakVFS_appdiff* d_vfs;
+  int d_index;
+  UnPackage_appdiff* d_pkg;
+  int d_used;
+};
+struct FStringCmp
+{ 
+public:
+  bool operator()(const FString& a, const FString& b) const 
   {
-    vfs.Add(LoadFile(*FilePaths[i], AesKeys));
-  }
-  for (int i=0; i<vfs; ++i)
-  {
-    if (vfs[i]) delete vfs[i];
-  }
+    return strcmp(*a, *b) < 0;
+  } 
+};
+typedef std::map<FString, CMapInfo, FStringCmp> t_filemap;
+typedef std::map<FString, t_filemap, FStringCmp> t_dirmap;
+
+
+class CRegInfo
+{
+public:
+	CRegInfo() : Filename(""), Path(""), Size(0), IndexInArchive(-1) { return; }
+  FString Filename;
+  FString Path;
+	int64 Size;
+	int IndexInArchive;
+};
+
+
+class FPakVFS_appdiff : public FPakVFS
+{
+public:
+	FPakVFS_appdiff(const char* InFilename, const TArray<FString> &AesKeys)
+  : FPakVFS(InFilename), AesKeysRef(AesKeys), KeyIndex(-1), NumFiles(0)
+  { return; }
+	virtual ~FPakVFS_appdiff() {
+		if (Reader) {
+      delete Reader;
+      Reader = NULL;
+    }
+	}
+  const FString& GetFilename(void) const { return Filename; }
+
+protected:
+  void LoadPakIndexCommon(TArray<byte> &InfoBlock, FMemReader &InfoReader, FArchive* reader, const FPakInfo& info, FString& error);
+	// UE4.24 and older
+	virtual bool LoadPakIndexLegacy(FArchive* reader, const FPakInfo& info, FString& error);
+	// UE4.25 and newer
+	virtual bool LoadPakIndex(FArchive* reader, const FPakInfo& info, FString& error);
+
+public:
+  const TArray<FString> &AesKeysRef;
+  int32 NumFiles;
+  int KeyIndex;
+  FPakInfo PakInfo;
+  TArray<CRegInfo> RegInfo;
+};
+
+
+class UnPackage_appdiff : public UnPackage
+{
+	DECLARE_ARCHIVE(UnPackage_appdiff, UnPackage);
+protected:
+	UnPackage_appdiff(FPakVFS_appdiff* vfs, int IndexInArchive, const FString &Filename, t_filemap &FileMap);
+public:
+	static UnPackage_appdiff* LoadPackage(FPakVFS_appdiff* vfs, int IndexInArchive, const FString &Filename, t_filemap &FileMap);
+};
+
+
+CIndexFileInfo::~CIndexFileInfo(void)
+{
+  UnPackage::UnloadPackage(Package);
   return;
 }
 
 
-static FVirtualFileSystem* LoadFile(const char* FilePath, const TArray<FString> &AesKeys)
+static FPakVFS_appdiff* LoadFile(const char* FilePath, const TArray<FString> &AesKeys)
 {
+  FPakVFS_appdiff *vfs = NULL;
+
 	guard(LoadFile);
 
 	const char* ext = strrchr(FilePath, '.');
 	if (ext == NULL) return NULL;
 	ext++;
-
-	// Find if this file in an archive with VFS inside
-	FVirtualFileSystem* vfs = NULL;
-	FArchive* reader = NULL;
-
-#if SUPPORT_ANDROID
-	if (!stricmp(ext, "obb"))
+	if (stricmp(ext, "pak")) return NULL;
+	vfs = new FPakVFS_appdiff(FilePath, AesKeys);
+	if (!vfs) return NULL;
+	FArchive* reader = new FFileReader(FilePath);
+	if (!reader) return NULL;
+	reader->Game = GAME_UE4_BASE;
+  // ignore non-UE4 extensions for speedup file registration
+  //GIsUE4PackageMode = true;
+	// read VF directory
+	FString error;
+	if (!vfs->AttachReader(reader, error))
 	{
-		GForcePlatform = PLATFORM_ANDROID;
-		reader = new FFileReader(FilePath);
-		if (!reader) return NULL;
-		reader->Game = GAME_UE3;
-		vfs = new FObbVFS(FilePath);
-	}
-#endif // SUPPORT_ANDROID
-#if UNREAL4
-	if (!stricmp(ext, "pak"))
-	{
-		reader = new FFileReader(FilePath);
-		if (!reader) return NULL;
-		reader->Game = GAME_UE4_BASE;
-		vfs = new FPakVFS_appdiff(FilePath, AesKeys);
-		//GIsUE4PackageMode = true; // ignore non-UE4 extensions for speedup file registration
-	}
-#endif // UNREAL4
-
-	//!! note: VFS pointer is not stored in any global list, and not released upon program exit
-	if (vfs)
-	{
-		assert(reader);
-		// read VF directory
-		FString error;
-		if (!vfs->AttachReader(reader, error))
+		// something goes wrong
+		if (error.Len())
 		{
-#if UNREAL4
-			// Reset GIsUE4PackageMode back in a case if .pak file appeared in directory
-			// by accident.
-			//GIsUE4PackageMode = false;
-#endif
-			// something goes wrong
-			if (error.Len())
-			{
-				appPrintf("%s\n", *error);
-			}
-			else
-			{
-				appPrintf("File %s has an unknown format\n", FilePath);
-			}
-			delete vfs;
-			delete reader;
-			return NULL;
-		}
-#if UNREAL4
-		//GIsUE4PackageMode = false;
-#endif
-	}
-	else
-	{
-    int size = 0;
-		FILE* f = fopen(FilePath, "rb");
-		if (f)
-		{
-			fseek(f, 0, SEEK_END);
-			size = ftell(f);
-			fclose(f);
+			appPrintf("%s\n", *error);
 		}
 		else
 		{
-			// File is not accessible
-			return NULL;
+			appPrintf("File %s has an unknown format\n", FilePath);
 		}
-    vfs = FFileVFS_appdiff(FilePath, size);
+		delete vfs;
+		delete reader;
+    vfs = NULL;
 	}
+	// Reset GIsUE4PackageMode back in a case if .pak file appeared in directory
+	// by accident.
+	//GIsUE4PackageMode = false;
 
 	unguardf("%s", FilePath);
 
@@ -107,21 +146,134 @@ static FVirtualFileSystem* LoadFile(const char* FilePath, const TArray<FString> 
 }
 
 
-FFileVFS_appdiff::FFileVFS_appdiff(const char* RelFilePath, int size)
+#define TRACK_UNKNOWN_CLASS 0
+Index::Index(const TArray<FStaticString<256>> &FilePaths, const TArray<FString> &AesKeys)
 {
-	RegInfo.AddZeroed(1);
+  for (int i=0; i<FilePaths.Num(); ++i)
+  {
+    FPakVFS_appdiff* vfs_i = LoadFile(*FilePaths[i], AesKeys);
+    if (vfs_i == NULL) continue;
+    d_vfs.Add(vfs_i);
+  }
 
-	// Split file name and register/find folder
-	FStaticString<MAX_PACKAGE_PATH> Folder;
-  Folder = RelFilePath;
-	const char* s = strrchr(*Folder, '/');
-  Folder[s - *Folder] = 0;
+  // Map files and look for duplicates; removing dups without further checking
+  t_dirmap DirMap;
+  for (int i=0; i<d_vfs.Num(); ++i)
+  {
+    for (int j=0; j<d_vfs[i]->RegInfo.Num(); ++j)
+    {
+      CRegInfo &E = d_vfs[i]->RegInfo[j];
+      t_filemap& Files = DirMap[E.Path];
+      if (Files.count(E.Filename))
+      {
+        appPrintf("FOUND DUP: %s/%s\n", *(E.Path), *(E.Filename));
+      }
+      else
+      {
+        CMapInfo MapInfo(d_vfs[i], j);
+        Files[E.Filename] = MapInfo;
+      }
+    }
+  }
 
-	CRegisterFileInfo &reg = RegInfo[0];
-	reg.Filename = s + 1;
-  reg.Path = *Folder;
-	reg.Size = size;
-	reg.IndexInArchive = 0;
+  // Merge/expand packages
+  for (t_dirmap::iterator it = DirMap.begin(); it != DirMap.end(); it++)
+  {
+    for (t_filemap::iterator it2 = (it->second).begin(); it2 != (it->second).end(); it2++)
+    {
+      CRegInfo &E = it2->second.d_vfs->RegInfo[it2->second.d_index];
+    	const char *ext = strrchr(*(E.Filename), '.');
+    	if (!ext) continue;
+    	// to know if file is a package or not. Note: this will also make pak loading a bit faster.
+  		// Faster case for UE4 files - it has small list of extensions
+    	if (!FindUE4Extension(ext+1)) continue;
+      it2->second.d_pkg = UnPackage_appdiff::LoadPackage(it2->second.d_vfs,
+                                                         E.IndexInArchive,
+                                                         it2->first,
+                                                         it->second);
+    }
+  }
+
+  // Figure out number of files that are not bundled with others.
+  int Total = 0;
+  for (t_dirmap::iterator it = DirMap.begin(); it != DirMap.end(); it++)
+    for (t_filemap::iterator it2 = (it->second).begin(); it2 != (it->second).end(); it2++)
+      if (!it2->second.d_used)
+        Total++;
+
+  // Create list of file information; sorted due to iteration.
+  d_info.SetNum(Total);
+  int Counter = 0;
+#if TRACK_UNKNOWN_CLASS
+  std::map<FString, int, FStringCmp> UnknownClass;
+#endif
+  for (t_dirmap::iterator it = DirMap.begin(); it != DirMap.end(); it++)
+  {
+    for (t_filemap::iterator it2 = (it->second).begin(); it2 != (it->second).end(); it2++)
+    {
+      if (it2->second.d_used) continue;
+      CRegInfo &E = it2->second.d_vfs->RegInfo[it2->second.d_index];
+      CIndexFileInfo &I = d_info[Counter];
+      I.MyIndex = Counter;
+      I.FileSystem = it2->second.d_vfs;
+      I.Path = E.Path;
+      I.Filename = E.Filename;
+      I.Size = E.Size;
+      I.SizeInKb = (E.Size + 512) / 1024;;
+      I.IndexInArchive = E.IndexInArchive;
+      I.Package = it2->second.d_pkg;
+      I.IsPackage = I.Package != NULL;
+      I.IsPackageScanned = true;
+      if (I.IsPackage)
+      {
+        UnPackage* package = I.Package;
+      	for (int idx=0; idx<package->Summary.ExportCount; idx++)
+      	{
+      		const char* ObjectClass = package->GetObjectName(package->GetExport(idx).ClassIndex);
+      		if (!stricmp(ObjectClass, "SkeletalMesh") || !stricmp(ObjectClass, "DestructibleMesh"))
+      			I.NumSkeletalMeshes++;
+      		else if (!stricmp(ObjectClass, "StaticMesh"))
+      			I.NumStaticMeshes++;
+          // whole AnimSet count for UE2 and number of sequences for UE3+
+      		else if (!stricmp(ObjectClass, "Animation") ||
+                   !stricmp(ObjectClass, "MeshAnimation") ||
+                   !stricmp(ObjectClass, "AnimSequence"))
+      			I.NumAnimations++;
+      		else if (!strnicmp(ObjectClass, "Texture", 7))
+      			I.NumTextures++;
+#if TRACK_UNKNOWN_CLASS
+          else
+            UnknownClass[ObjectClass] = 1;
+#endif
+      	}
+      }
+      Counter++;
+    }
+  }
+  assert(Counter == Total);
+
+#if TRACK_UNKNOWN_CLASS
+  for (std::map<FString, int, FStringCmp>::iterator it=UnknownClass.begin(); it != UnknownClass.end(); it++)
+  {
+    appPrintf("WARNING: Unknown OBJECTCLASS: %s\n", *(it->first));
+  }
+#endif
+
+  return;
+}
+
+Index::~Index(void)
+{
+  for (int i=0; i<d_vfs.Num(); ++i) if (d_vfs[i]) delete d_vfs[i];
+  return;
+}
+
+void Index::Print(void)
+{
+  for (int i=0; i<d_info.Num(); ++i)
+  {
+    appPrintf("%s/%s\n", *(d_info[i].Path), *(d_info[i].Filename));
+  }
   return;
 }
 
@@ -203,8 +355,6 @@ void FPakVFS_appdiff::LoadPakIndexCommon(TArray<byte> &InfoBlock, FMemReader &In
 	FileInfos.AddZeroed(NumFiles);
 	RegInfo.AddZeroed(NumFiles);
 
-	//Reserve(NumFiles); // reserves global file tracking
-
 	unguardf("LoadPakIndexCommon");
 
   return;
@@ -261,12 +411,11 @@ bool FPakVFS_appdiff::LoadPakIndexLegacy(FArchive* reader, const FPakInfo& info,
     Folder[s - *Folder] = 0;
 
 		// Register the file
-		CRegisterFileInfo &reg = RegInfo[i];
+		CRegInfo &reg = RegInfo[i];
 		reg.Filename = s + 1;
     reg.Path = *Folder;
 		reg.Size = E.UncompressedSize;
 		reg.IndexInArchive = i;
-		//E.FileInfo = RegisterFile(reg);
 
 		unguardf("Index=%d/%d", i, NumFiles);
 	}
@@ -357,15 +506,6 @@ bool FPakVFS_appdiff::LoadPakIndex(FArchive* reader, const FPakInfo& info, FStri
 	guard(BuildFullDirectory);
 	int FileIndex = 0;
 
-	/*
-		// We're unwrapping this complex structure serializer for faster performance (much less allocations)
-		using FPakEntryLocation = int32;
-		typedef TMap<FString, FPakEntryLocation> FPakDirectory;
-		// Each directory has files, it maps clean filename to index
-		TMap<FString, FPakDirectory> DirectoryIndex;
-		InfoReader << DirectoryIndex;
-	*/
-
 	int32 DirectoryCount;
 	InfoReader << DirectoryCount;
 
@@ -385,8 +525,6 @@ bool FPakVFS_appdiff::LoadPakIndex(FArchive* reader, const FPakInfo& info, FStri
 		//CompactFilePath(DirectoryPath);
 		if (DirectoryPath[DirectoryPath.Len()-1] == '/')
 			DirectoryPath.RemoveAt(DirectoryPath.Len()-1, 1);
-
-		//int FolderIndex = RegisterGameFolder(*DirectoryPath);
 
 		// Read size of FPakDirectory (DirectoryIndex::Value)
 		int32 NumFilesInDirectory;
@@ -427,21 +565,13 @@ bool FPakVFS_appdiff::LoadPakIndex(FArchive* reader, const FPakInfo& info, FStri
 			E.CompressionMethod = CompressionMethodIndex > 0 ? info.CompressionMethods[CompressionMethodIndex-1] : 0;
 
 			// Register the file
-			CRegisterFileInfo &reg = RegInfo[FileIndex];
-			reg.Filename = *DirectoryFileName;
-			reg.Path = *DirectoryPath;
+      const char *t1 = *DirectoryFileName;
+      const char *t2 = *DirectoryPath;
+			CRegInfo &reg = RegInfo[FileIndex];
+			reg.Filename = t1;
+			reg.Path = t2;
 			reg.Size = E.UncompressedSize;
 			reg.IndexInArchive = FileIndex;
-
-      /*
-			// Register the file
-			CRegisterFileInfo reg;
-			reg.Filename = *DirectoryFileName;
-			reg.FolderIndex = FolderIndex;
-			reg.Size = E.UncompressedSize;
-			reg.IndexInArchive = FileIndex;
-			E.FileInfo = RegisterFile(reg);
-      */
 
 			FileIndex++;
 			unguard;
@@ -454,179 +584,79 @@ bool FPakVFS_appdiff::LoadPakIndex(FArchive* reader, const FPakInfo& info, FStri
 	}
 	unguard;
 
-#if 0
-	if (count >= MIN_PAK_SIZE_FOR_HASHING)
-	{
-		// Hash everything
-		for (FPakEntry& E : FileInfos)
-		{
-			AddFileToHash(&E);
-		}
-	}
-#endif
-
 	return true;
 
 	unguard;
 }
 
 
-CGameFileInfo* CGameFileInfo::Register(FVirtualFileSystem* parentVfs, const CRegisterFileInfo& RegisterInfo)
+UnPackage_appdiff::UnPackage_appdiff(FPakVFS_appdiff* vfs, int IndexInArchive, const FString &Filename, t_filemap &FileMap)
 {
-	guard(CGameFileInfo::Register);
+	guard(UnPackage_appdiff::UnPackage_appdiff);
 
-	// Verify file extension
-	const char *ext = strrchr(RegisterInfo.Filename, '.');
-	if (!ext)
-  {
-    appPrintf("***********SKIPPING UNKNOWN EXTENSION.\n");
-    return NULL; // unknown type
+	IsLoading = true;
+
+  GAesKey = vfs->AesKeysRef[vfs->KeyIndex];
+  FArchive* baseLoader = vfs->CreateReader(IndexInArchive);
+	Loader = CreateLoader(*Filename, baseLoader);
+  if (!Loader) return; // deleted baseLoader in CreateLoader already
+	SetupFrom(*Loader);
+	if (!Summary.Serialize(*this)) return; // Probably not a package
+	Loader->SetupFrom(*this);	// serialization of FPackageFileSummary could change some FArchive properties
+	ReplaceLoader();
+
+	LoadNameTable();
+	LoadImportTable();
+	LoadExportTable();
+
+	// Process Event Driven Loader packages: such packages are split into 2 pieces: .uasset with headers
+	// and .uexp with object's data. At this moment we already have FPackageFileSummary fully loaded,
+	// so we can replace loader with .uexp file - with providing correct position offset.
+	if (Game >= GAME_UE4_BASE && Summary.HeadersSize == Loader->GetFileSize())
+	{
+		guard(FindUexp);
+		char buf[MAX_PACKAGE_PATH];
+		appStrncpyz(buf, *Filename, ARRAY_COUNT(buf));
+		char* s = strrchr(buf, '.');
+		if (!s) s = strchr(buf, 0);
+		strcpy(s, ".uexp");
+    FString ExpFilename = buf;
+    if (FileMap.count(ExpFilename))
+		{
+      CMapInfo &MapInfo = FileMap[ExpFilename];
+      MapInfo.d_used = 1;
+      CRegInfo &E = MapInfo.d_vfs->RegInfo[MapInfo.d_index];
+      FArchive* expLoader = MapInfo.d_vfs->CreateReader(E.IndexInArchive);
+			// Replace loader with this file, but add offset so it will work like it is part of original uasset
+			delete Loader;
+			Loader = new FReaderWrapper(expLoader, -Summary.HeadersSize);
+		}
+		else
+		{
+			appPrintf("WARNING: it seems package %s has missing .uexp file\n", *Filename);
+		}
+		unguard;
+	}
+
+	//PackageMap.Add(this);
+
+	// Release package file handle
+	CloseReader();
+
+	unguard;
+}
+
+
+UnPackage_appdiff* UnPackage_appdiff::LoadPackage(FPakVFS_appdiff* vfs, int IndexInArchive, const FString &Filename, t_filemap &FileMap)
+{
+	guard(UnPackage_appdiff::LoadPackage);
+
+	UnPackage_appdiff* package = new UnPackage_appdiff(vfs, IndexInArchive, Filename, FileMap);
+	if (!package->IsValid()) {
+    delete package;
+    return NULL;
   }
-	ext++;
+  return package;
 
-	// to know if file is a package or not. Note: this will also make pak loading a but faster.
-	bool IsPackage = false;
-#if UNREAL4
-	if (GIsUE4PackageMode)
-	{
-		// Faster case for UE4 files - it has small list of extensions
-		IsPackage = FindExtension(ext, ARRAY_ARG(UE4PackageExtensions));
-	}
-	else
-#endif
-	{
-		// Longer list for games older than UE4. Processed slower, however we never have such a long list of files as for UE4.
-		IsPackage = FindExtension(ext, ARRAY_ARG(PackageExtensions));
-	}
-
-	if (!parentVfs && !IsPackage)
-	{
-#if HAS_SUPPORT_FILES
-		// Check for suppressed extensions
-		if (!FindExtension(ext, ARRAY_ARG(KnownExtensions)))
-#endif
-		{
-			// Unknown extension. Check if we should count it or not.
-			// ignore unknown files inside "cooked" or "content" directories
-			if (appStristr(RegisterInfo.Filename, "cooked") || appStristr(RegisterInfo.Filename, "content")) return NULL;
-			// perhaps this file was exported by our tool - skip it
-			if (!FindExtension(ext, ARRAY_ARG(SkipExtensions)))
-			{
-				// Unknown file type
-				if (++GNumForeignFiles >= MAX_FOREIGN_FILES)
-					appErrorNoLog("Too many unknown files - bad root directory (%s)?", GRootDirectory);
-			}
-			return NULL;
-		}
-	}
-
-	// A known file type is here.
-
-	// Use RegisterInfo.Path if not empty
-	const char* ShortFilename = RegisterInfo.Filename;
-	int FolderIndex = 0;
-
-	if (RegisterInfo.FolderIndex)
-	{
-		FolderIndex = RegisterInfo.FolderIndex;
-	}
-	else if (!RegisterInfo.Path)
-	{
-		// Split file name and register/find folder
-		FStaticString<MAX_PACKAGE_PATH> Folder;
-		if (const char* s = strrchr(RegisterInfo.Filename, '/'))
-		{
-			// Have a path part inside a filename
-			Folder = RegisterInfo.Filename;
-			// Cut path at '/' location
-			Folder[s - RegisterInfo.Filename] = 0;
-			ShortFilename = s + 1;
-		}
-		FolderIndex = RegisterGameFolder(*Folder);
-	}
-	else
-	{
-		FolderIndex = RegisterGameFolder(RegisterInfo.Path);
-	}
-
-	int extOffset = ext - ShortFilename;
-	assert(extOffset < 256); // restriction of CGameFileInfo::ExtensionOffset
-
-	// Create CGameFileInfo entry
-	CGameFileInfo* info = AllocFileInfo();
-	info->IsPackage = IsPackage;
-	info->FileSystem = parentVfs;
-	info->IndexInVfs = RegisterInfo.IndexInArchive;
-	info->ShortFilename = appStrdupPool(ShortFilename);
-	info->ExtensionOffset = extOffset;
-	info->FolderIndex = FolderIndex;
-	info->Size = RegisterInfo.Size;
-	info->SizeInKb = (info->Size + 512) / 1024;
-
-	if (info->Size < 16) info->IsPackage = false;
-
-#if UNREAL3
-	if (info->IsPackage && (strnicmp(info->ShortFilename, "startup", 7) == 0))
-	{
-		// Register a startup package
-		// possible name variants:
-		// - startup
-		// - startup_int
-		// - startup_*
-		int startupWeight = 0;
-		if (info->ShortFilename[7] == '.')
-			startupWeight = 30;							// "startup.upk"
-		else if (strnicmp(info->ShortFilename+7, "_int.", 5) == 0)
-			startupWeight = 20;							// "startup_int.upk"
-		else if (strnicmp(info->ShortFilename+7, "_loc_int.", 9) == 0)
-			startupWeight = 20;							// "startup_int.upk"
-		else if (info->ShortFilename[7] == '_')
-			startupWeight = 1;							// non-int locale, lower priority - use if when other is not detected
-		if (startupWeight > GStartupPackageInfoWeight)
-		{
-			GStartupPackageInfoWeight = startupWeight;
-			GStartupPackageInfo = info;
-		}
-	}
-#endif // UNREAL3
-
-	int hash = GetHashForFileName<true>(info->ShortFilename);
-
-	// find if we have previously registered file with the same name
-	FastNameComparer FilenameCmp(info->ShortFilename);
-	for (CGameFileInfo* prevInfo = GameFileHash[hash]; prevInfo; prevInfo = prevInfo->HashNext)
-	{
-		if ((prevInfo->FolderIndex == FolderIndex) && FilenameCmp(prevInfo->ShortFilename))
-		{
-			// this is a duplicate of the file (patch), use new information
-			prevInfo->UpdateFrom(info);
-			// return allocated info back to pool, so it will be reused next time
-			DeallocFileInfo(info);
-#if DEBUG_HASH
-			appPrintf("--> dup(%s) pkg=%d hash=%X\n", prevInfo->ShortFilename, prevInfo->IsPackage, hash);
-#endif
-			return prevInfo;
-		}
-	}
-
-	// Insert new CGameFileInfo into hash table
-	if (GameFiles.Num() + 1 >= GameFiles.Max())
-	{
-		// Resize GameFiles array with large steps
-		GameFiles.Reserve(GameFiles.Num() + 1024);
-	}
-	GameFiles.Add(info);
-	if (IsPackage) GNumPackageFiles++;
-	GameFolders[FolderIndex].NumFiles++;
-
-	info->HashNext = GameFileHash[hash];
-	GameFileHash[hash] = info;
-
-#if DEBUG_HASH
-	appPrintf("--> add(%s) pkg=%d hash=%X\n", info->ShortFilename, info->IsPackage, hash);
-#endif
-
-	return info;
-
-	unguardf("%s", RegisterInfo.Filename);
+	unguard;
 }

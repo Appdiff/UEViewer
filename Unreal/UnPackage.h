@@ -249,6 +249,7 @@ public:
 #endif
 
 protected:
+  UnPackage() : FilenameNoInfo(""), Name(""), FileInfo(NULL), Loader(NULL) { return; }
 	UnPackage(const char *filename, const CGameFileInfo* fileInfo = NULL, bool silent = false);
 	~UnPackage();
 
@@ -415,7 +416,7 @@ public:
 		Loader->Close();
 	}
 
-private:
+protected:
 	void LoadNameTable();
 	void LoadImportTable();
 	void LoadExportTable();

@@ -446,7 +446,7 @@ public:
 
 	return Loader;
 
-	unguardf("%s", filename);
+	unguardf("UnPackage::CreateLoader");
 }
 
 void UnPackage::ReplaceLoader()

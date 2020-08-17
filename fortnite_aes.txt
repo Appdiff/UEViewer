@@ -2,6 +2,8 @@
 ./umodel -save -game=ue4.26 -aes=$KEY -out=/appdiff/tmp/fortnite/07072020/save -path=/appdiff/tmp/fortnite/07072020/src/1000
 ./umodel -export -png -game=ue4.26 -aes=$KEY -out=/appdiff/tmp/fortnite/07072020/export/1000 -path=/appdiff/tmp/fortnite/07072020/src/1000
 ./umodel -export -png -psk -lods -game=ue4.26 -aes=$KEY -out=/appdiff/tmp/fortnite/07072020/export/1000 -path=/appdiff/tmp/fortnite/07072020/src/1000
+./umodel.appdiff -game=ue4.26 -aes=@/appdiff/tmp/fortnite/fortnite_all_keys.txt -path=/appdiff/tmp/fortnite/13.20/paks
+
 
 Fortnite+Release-13.20-CL-13777676-Mac
 Fortnite+Release-13.30-CL-13884087-Mac

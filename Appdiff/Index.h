@@ -2,51 +2,64 @@
 #define __APPDIFF_INDEX_H__
 
 
-#include "Core/Core.h"
-#include "Unreal/UnCore.h"
-#include "Unreal/FileSystem/GameFileSystem.h"
-#include "Unreal/FileSystem/UnArchivePak.h"
-#include "Unreal/FileSystem/UnArchiveObb.h"
+class FPakVFS_appdiff;
+class FString;
+class UnPackage_appdiff;
+template <int N> class FStaticString;
+template <typename T> class TArray;
 
 
-class FPakVFS_appdiff : public FPakVFS
+class CIndexFileInfo
 {
 public:
-	FPakVFS_appdiff(const char* InFilename, const TArray<FString> &AesKeys)
-  : FPakVFS(InFilename), AesKeysRef(AesKeys), KeyIndex(-1), NumFiles(0)
+  CIndexFileInfo(void)
+  : MyIndex(-1), FileSystem(NULL), Package(NULL), Path(""), Filename(""),
+    Size(0), SizeInKb(0), ExtraSizeInKb(0), IndexInArchive(-1),
+    IsPackage(false), IsPackageScanned(false),
+    NumSkeletalMeshes(0), NumStaticMeshes(0), NumAnimations(0), NumTextures(0)
   { return; }
-	virtual ~FPakVFS_appdiff() {
-	  if (Reader) delete Reader;
-	}
+  ~CIndexFileInfo(void);
 
-protected:
-  void LoadPakIndexCommon(TArray<byte> &InfoBlock, FMemReader &InfoReader, FArchive* reader, const FPakInfo& info, FString& error);
-	// UE4.24 and older
-	virtual bool LoadPakIndexLegacy(FArchive* reader, const FPakInfo& info, FString& error);
-	// UE4.25 and newer
-	virtual bool LoadPakIndex(FArchive* reader, const FPakInfo& info, FString& error);
+  int MyIndex;
 
-protected:
-  const TArray<FString> &AesKeysRef;
-  int32 NumFiles;
-  int KeyIndex;
-  FPakInfo PakInfo;
-  TArray<CRegisterFileInfo> RegInfo;
+	FPakVFS_appdiff* FileSystem;
+	UnPackage* Package; // non-null when corresponding package is loaded
+
+  FString Path;
+  FString Filename;
+	int64		Size;
+	int64		SizeInKb;
+	int64		ExtraSizeInKb;
+	int64		IndexInArchive;
+
+	// content information, valid when IsPackageScanned is true
+	//todo: can store index in some global Info structure, reuse Info for matching cases,
+	//todo: e.g. when uasset has Skel=1+Other=0, or All=0 etc; Index=-1 = not scanned
+	bool		IsPackage;
+	bool		IsPackageScanned;
+	uint16	NumSkeletalMeshes;
+	uint16	NumStaticMeshes;
+	uint16	NumAnimations;
+	uint16	NumTextures;
 };
 
 
-class FFileVFS_appdiff : public FVirtualFileSystem
+class Index
 {
 public:
-	FFileVFS_appdiff(const char* RelFilePath, int size);
-	virtual ~FPakVFS_appdiff() {}
+  Index(const TArray<FStaticString<256>> &FilePaths, const TArray<FString> &AesKeys);
+  ~Index(void);
+  void Print(void);
+  TArray<CIndexFileInfo>& GetFileInfos(void) { return d_info; }
 
 protected:
-  TArray<CRegisterFileInfo> RegInfo;
+  TArray<FPakVFS_appdiff*> d_vfs;
+  TArray<CIndexFileInfo> d_info;
+
+protected:
+  Index();
+  Index(const Index&);
 };
-
-
-void LoadIndex(const TArray<FStaticString<256>> &FilePaths, const TArray<FString> &AesKeys);
 
 
 #endif // __APPDIFF_INDEX_H__

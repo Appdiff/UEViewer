@@ -1,3 +1,4 @@
+#include <map>
 #include "Core.h"
 
 #if _WIN32
@@ -7,6 +8,7 @@
 
 #include "Unreal/UnCore.h"
 #include "Appdiff/Assets.h"
+#include "Appdiff/Index.h"
 #include "Appdiff/Other.h"
 #include "Appdiff/aes_keys.h"
 #include "Exporters/Exporters.h"
@@ -414,10 +416,37 @@ int main(int argc, const char **argv)
 
   TArray<FStaticString<256>> FilePaths;
   appScanRoot(FilePaths, *GSettings.Startup.GamePath, packagesToLoad, true);
-  for (int i=0; i<FilePaths.Num(); ++i)
+  Index index(FilePaths, AesKeys);
+  //index.Print();
+  TArray<CIndexFileInfo>& FileInfos = index.GetFileInfos();
+  bool IsInitialized = false;
+  for (int i=0; i<FileInfos.Num(); ++i)
   {
-    appPrintf("Path Found: %s\n", *FilePaths[i]);
+    CIndexFileInfo &FileInfo = FileInfos[i];
+    if (FileInfo.IsPackage)
+    {
+      if (!IsInitialized)
+      {
+        InitClassAndExportSystems(FileInfo.Package->Game);
+        IsInitialized = true;
+      }
+    	BeginExport(true);
+  		LoadWholePackage(FileInfo.Package, NULL);
+  		ExportObjects(NULL, NULL);
+      ReleaseAllObjects();
+    	EndExport(true);
+    }
+    else
+    {
+      // Do nothing for now.  Need to figure out how encryption impacts it.
+      // Also need to figure out if there are any special serialization steps
+      // that are required for exporting.
+      ;
+    }
   }
+  return 0;
+
+
   bool bShouldLoadPackages = true;
   TArray<UnPackage*> Packages;
   appLoadPackages(Packages, FilePaths, AesKeys, bShouldLoadPackages);
